@@ -28,7 +28,7 @@ export async function generateTankRecommendations(
   // Map stats: prefer replay data (own battles) over tomato.gg scraping
   const replayMaps = replayContext?.mapStats ?? [];
   const effectiveMaps = replayMaps.length >= 3 ? replayMaps : mapStats;
-  const mapSource = replayMaps.length >= 3 ? 'from own replays' : 'from tomato.gg';
+  const mapSource = replayMaps.length >= 3 ? 'from own replays' : 'from API stats';
   const mapSummary = effectiveMaps.length > 0
     ? effectiveMaps
         .sort((a, b) => b.battles - a.battles)

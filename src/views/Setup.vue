@@ -14,10 +14,9 @@ const detectError = ref<string | null>(null);
 // Step 2 — detected player
 const detectedName = ref('');
 const detectedId = ref(0);
-const detectedRegion = ref('EU');
+const detectedRegion = ref('');
 
 // Step 3 — API keys
-const wgApiKey = ref('2657ca7fc65c427a1adcf0f8712b8e03');
 const claudeApiKey = ref('');
 const saving = ref(false);
 
@@ -54,7 +53,6 @@ async function finish() {
       username: detectedName.value,
       accountId: detectedId.value,
       region: detectedRegion.value,
-      wgApiKey: wgApiKey.value.trim() || config.wgApiKey,
       claudeApiKey: claudeApiKey.value.trim() || config.claudeApiKey,
     });
     // Kick off initial scan in background — no need to await
@@ -78,7 +76,7 @@ async function finish() {
 
       <!-- Step indicators -->
       <div class="flex items-center justify-center gap-2 mb-8 mt-3">
-        <div v-for="(s, i) in ['replays', 'confirm', 'keys']" :key="s"
+        <div v-for="s in ['replays', 'confirm', 'keys']" :key="s"
           :class="['w-2 h-2 rounded-full transition-colors', step === s ? 'bg-indigo-500' : 'bg-gray-700']"
         />
       </div>
@@ -122,15 +120,7 @@ async function finish() {
         <div class="bg-indigo-900/20 border border-indigo-700/50 rounded-xl px-5 py-4 text-center">
           <p class="text-2xl font-bold text-gray-100 mb-1">{{ detectedName }}</p>
           <p class="text-sm text-gray-400">Account ID: {{ detectedId }}</p>
-          <div class="flex items-center justify-center gap-2 mt-2">
-            <select v-model="detectedRegion"
-              class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="EU">EU — Europe</option>
-              <option value="NA">NA — North America</option>
-              <option value="ASIA">ASIA — Asia</option>
-            </select>
-          </div>
+          <p class="text-sm text-gray-400 mt-1">Region: <span class="text-gray-200">{{ detectedRegion }}</span></p>
         </div>
 
         <p class="text-xs text-gray-500 text-center">
@@ -151,20 +141,9 @@ async function finish() {
       <!-- Step 3: API keys -->
       <div v-else-if="step === 'keys'" class="space-y-4">
         <p class="text-sm text-gray-400 text-center mb-2">
-          API keys unlock additional features.<br>
-          <span class="text-gray-600">Both are optional — you can add them later in Settings.</span>
+          Optionally add your Claude API key for AI-powered tips per tank.<br>
+          <span class="text-gray-600">You can add it later in Settings.</span>
         </p>
-
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">
-            Wargaming API Key
-            <span class="text-gray-600 ml-1">— lifetime tank stats, WN8</span>
-          </label>
-          <input v-model="wgApiKey"
-            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono"
-          />
-          <p class="text-xs text-gray-600 mt-1">Pre-filled with a public demo key. Get your own at developers.wargaming.net</p>
-        </div>
 
         <div>
           <label class="block text-xs text-gray-400 mb-1">

@@ -14,30 +14,29 @@ const cacheStats = ref<CacheStats>({ tanks: 0, lastSync: null });
 const clearing = ref(false);
 const clearingBattles = ref(false);
 const battlesCleared = ref(false);
-const searching = ref(false);
-const searchError = ref<string | null>(null);
-const foundPlayer = ref<{ account_id: number; nickname: string } | null>(null);
+const redetecting = ref(false);
+const redetectError = ref<string | null>(null);
+const redetectSuccess = ref(false);
 
-async function searchPlayer() {
-  if (!form.value.username.trim()) return;
-  searching.value = true;
-  searchError.value = null;
-  foundPlayer.value = null;
+async function redetectPlayer() {
+  redetecting.value = true;
+  redetectError.value = null;
+  redetectSuccess.value = false;
   try {
-    const results = await window.api.searchPlayer(form.value.username.trim(), form.value.region);
-    const exact = results.find(r => r.nickname.toLowerCase() === form.value.username.trim().toLowerCase());
-    const match = exact ?? results[0] ?? null;
-    if (!match) {
-      searchError.value = 'Player not found.';
-    } else {
-      foundPlayer.value = match;
-      form.value.username = match.nickname;
-      form.value.accountId = match.account_id;
+    const player = await window.api.detectPlayer();
+    if (!player) {
+      redetectError.value = 'No complete replay files found. Check your replays directory path.';
+      return;
     }
+    form.value.username = player.playerName;
+    form.value.accountId = player.accountId;
+    form.value.region = player.region;
+    redetectSuccess.value = true;
+    setTimeout(() => redetectSuccess.value = false, 4000);
   } catch (e) {
-    searchError.value = e instanceof Error ? e.message : 'Search failed';
+    redetectError.value = e instanceof Error ? e.message : 'Detection failed';
   } finally {
-    searching.value = false;
+    redetecting.value = false;
   }
 }
 
@@ -96,57 +95,43 @@ onMounted(async () => {
   <div class="p-6 max-w-2xl mx-auto w-full">
     <h2 class="text-2xl font-bold text-gray-100 mb-6">Settings</h2>
 
-    <!-- Player section -->
+    <!-- Player section — read-only, populated from replays -->
     <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
-      <h3 class="text-sm font-semibold text-gray-300 mb-4">Player account</h3>
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Region</label>
-          <select v-model="form.region" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
-            <option value="EU">EU (Europe)</option>
-            <option value="NA">NA (North America)</option>
-            <option value="ASIA">ASIA (Asia)</option>
-          </select>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-gray-300">Player account</h3>
+        <button
+          @click="redetectPlayer"
+          :disabled="redetecting || !form.replaysDir"
+          class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 border border-gray-600 rounded-lg transition-colors"
+        >
+          {{ redetecting ? 'Detecting...' : 'Re-detect from replays' }}
+        </button>
+      </div>
+      <div class="space-y-1 text-sm">
+        <div class="flex items-center gap-3">
+          <span class="text-gray-500 w-24">Username</span>
+          <span class="text-gray-100 font-medium">{{ form.username || '—' }}</span>
         </div>
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Username</label>
-          <div class="flex gap-2">
-            <input
-              v-model="form.username"
-              @keyup.enter="searchPlayer"
-              class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
-            />
-            <button
-              @click="searchPlayer"
-              :disabled="searching || !form.username.trim()"
-              class="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 text-sm rounded-lg transition-colors whitespace-nowrap"
-            >
-              {{ searching ? '...' : 'Find' }}
-            </button>
-          </div>
-          <p v-if="searchError" class="text-xs text-red-400 mt-1">{{ searchError }}</p>
-          <p v-if="foundPlayer" class="text-xs text-green-400 mt-1">
-            ✓ Found: {{ foundPlayer.nickname }} (ID: {{ foundPlayer.account_id }})
-          </p>
-          <p v-else-if="form.accountId" class="text-xs text-gray-500 mt-1">Account ID: {{ form.accountId }}</p>
+        <div class="flex items-center gap-3">
+          <span class="text-gray-500 w-24">Account ID</span>
+          <span class="text-gray-400 font-mono text-xs">{{ form.accountId || '—' }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-gray-500 w-24">Region</span>
+          <span class="text-gray-400">{{ form.region || '—' }}</span>
         </div>
       </div>
+      <p v-if="redetectError" class="text-xs text-red-400 mt-3">{{ redetectError }}</p>
+      <p v-if="redetectSuccess" class="text-xs text-green-400 mt-3">✓ Player re-detected. Save settings to apply.</p>
     </div>
 
     <!-- API Keys section -->
     <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
       <h3 class="text-sm font-semibold text-gray-300 mb-4">API Keys</h3>
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Wargaming API Key</label>
-          <input v-model="form.wgApiKey" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono" />
-          <p class="text-xs text-gray-600 mt-1">Get yours at developers.wargaming.net (free)</p>
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Claude API Key</label>
-          <input v-model="form.claudeApiKey" type="password" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono" />
-          <p class="text-xs text-gray-600 mt-1">Get yours at console.anthropic.com</p>
-        </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Claude API Key</label>
+        <input v-model="form.claudeApiKey" type="password" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono" />
+        <p class="text-xs text-gray-600 mt-1">Get yours at console.anthropic.com</p>
       </div>
     </div>
 
@@ -179,7 +164,7 @@ onMounted(async () => {
       class="flex items-center gap-2 px-4 py-3 mb-4 bg-green-900/40 border border-green-700 rounded-lg text-green-300 text-sm"
     >
       <span class="text-green-400 font-bold">✓</span>
-      Settings saved. Data reloaded for the new player.
+      Settings saved.
     </div>
 
     <!-- Error banner -->

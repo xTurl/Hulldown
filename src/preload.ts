@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld('api', {
   getPlayerInfo: (): Promise<PlayerInfo> => ipcRenderer.invoke('player:info'),
   getTankList: (): Promise<Tank[]> => ipcRenderer.invoke('tanks:list'),
   getTankDetails: (tankId: number): Promise<TankDetails> => ipcRenderer.invoke('tanks:details', tankId),
-  scrapeTankMapStats: (tankId: number): Promise<TankDetails | null> => ipcRenderer.invoke('tanks:mapscrape', tankId),
   getTankRecommendations: (tankId: number, force?: boolean): Promise<TankDetails> => ipcRenderer.invoke('tanks:recommendations', tankId, force),
   clearCache: (): Promise<void> => ipcRenderer.invoke('cache:clear'),
   getCacheStats: (): Promise<CacheStats> => ipcRenderer.invoke('cache:stats'),
