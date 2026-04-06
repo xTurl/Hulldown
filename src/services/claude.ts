@@ -16,6 +16,18 @@ export interface PlayerContext {
 
 const MASTERY = ['none', '3rd class', '2nd class', '1st class', 'Ace Tanker'];
 
+/**
+ * Strips control characters (including newlines) and limits length of strings
+ * interpolated into AI prompts — prevents prompt injection via API data.
+ */
+export function sanitizeForPrompt(value: string, maxLength = 200): string {
+  return String(value)
+    .replace(/[\x00-\x1F\x7F]/g, ' ') // control characters (incl. \n, \r) → space
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
 export async function generateTankRecommendations(
   tank: TankWithAssisted,
   mapStats: MapStat[],
@@ -33,7 +45,7 @@ export async function generateTankRecommendations(
     ? effectiveMaps
         .sort((a, b) => b.battles - a.battles)
         .slice(0, 10)
-        .map(m => `  - ${m.mapName}: ${m.battles}b, WR ${m.winRate}%, dmg ${m.avgDamage}`)
+        .map(m => `  - ${sanitizeForPrompt(m.mapName, 80)}: ${m.battles}b, WR ${m.winRate}%, dmg ${m.avgDamage}`)
         .join('\n')
     : '  No map data available';
 
@@ -46,7 +58,7 @@ ${Object.entries(playerContext.byClass)
   .map(([cls, s]) => {
     const diff = s.winRate - playerContext.overallWinRate;
     const flag = Math.abs(diff) >= 3 ? (diff > 0 ? ' ↑ strong' : ' ↓ weak') : '';
-    return `  - ${cls}: ${s.battles.toLocaleString('en-US')}b | ${s.winRate.toFixed(1)}% WR | WN8 ${s.wn8}${flag}`;
+    return `  - ${sanitizeForPrompt(cls, 40)}: ${s.battles.toLocaleString('en-US')}b | ${s.winRate.toFixed(1)}% WR | WN8 ${s.wn8}${flag}`;
   }).join('\n')}
 ` : '';
 
@@ -63,7 +75,7 @@ Note: compare recent WR/damage to overall stats above to detect improvement or r
 
   const prompt = `You are a World of Tanks expert. Analyze the player's stats and provide specific, actionable advice.
 ${contextSection}
-TANK: ${tank.name} (Tier ${tank.tier}, ${tank.type}, ${tank.nation})
+TANK: ${sanitizeForPrompt(tank.name, 80)} (Tier ${tank.tier}, ${sanitizeForPrompt(tank.type, 40)}, ${sanitizeForPrompt(tank.nation, 40)})
 OVERALL LIFETIME STATS:
 - Battles: ${tank.battles} | WR%: ${tank.winRate.toFixed(1)}% | WN8: ${tank.wn8} | WNX: ${tank.wnx}
 - Avg direct dmg: ${tank.avgDamage} | Avg assist (radio): ${tank.avgDamageAssisted ?? 0} | Avg tracking assist: ${tank.avgDamageAssistedTrack ?? 0}

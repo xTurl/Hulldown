@@ -6,6 +6,7 @@ import * as newsService from '../services/news';
 import * as claudeService from '../services/claude';
 import * as replayParser from '../services/replay-parser';
 import { calculateWn8, calculateWnx } from '../utils/wn8';
+import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
 import type { Tank, TankDetails, BattleRecord } from '../types';
 
 const ONE_HOUR = 60 * 60 * 1000;
@@ -166,11 +167,11 @@ export function registerHandlers(): void {
 
   handle('config:save', (config) => {
     clearMemCache();
-    configService.saveConfig(config as Parameters<typeof configService.saveConfig>[0]);
+    configService.saveConfig(assertConfig(config));
   });
 
   handle('player:search', (username, region) =>
-    wgService.searchPlayer(username as string, WG_API_KEY, region as string)
+    wgService.searchPlayer(assertString(username, 'username'), WG_API_KEY, assertString(region, 'region'))
   );
 
   handle('player:info', async () => {
@@ -226,7 +227,7 @@ export function registerHandlers(): void {
   });
 
   handle('tanks:details', async (tankId) => {
-    const id = tankId as number;
+    const id = assertNumber(tankId, 'tankId');
     const cached = cacheService.getTankDetails(id);
     if (cached && isValidTankDetails(cached.data)) return cached.data;
 
@@ -235,10 +236,11 @@ export function registerHandlers(): void {
     const tankStat = tankStats.find(t => t.tank_id === id);
     if (!tankStat) throw new Error(`Tank ${id} not found`);
 
+    const prevDetails = isValidTankDetails(cached?.data) ? (cached!.data as TankDetails) : undefined;
     const details: TankDetails = {
       ...buildTank(tankStat, encyclopedia[id]),
-      mapStats: (cached?.data as TankDetails | undefined)?.mapStats ?? [],
-      recommendations: (cached?.data as TankDetails | undefined)?.recommendations ?? null,
+      mapStats: prevDetails?.mapStats ?? [],
+      recommendations: prevDetails?.recommendations ?? null,
       rawStats: tankStat.all as unknown as Record<string, number>,
     };
 
@@ -247,12 +249,13 @@ export function registerHandlers(): void {
   });
 
   handle('tanks:recommendations', async (tankId, force) => {
-    const id = tankId as number;
+    const id = assertNumber(tankId, 'tankId');
     const cached = cacheService.getTankDetails(id);
     if (!cached) throw new Error('Tank details not loaded yet');
 
+    if (!isValidTankDetails(cached.data)) throw new Error('Cached tank data is corrupted');
     const details = cached.data as TankDetails;
-    if (details.recommendations && !force) return details;
+    if (details.recommendations && !assertBoolean(force, 'force')) return details;
 
     const config = configService.getConfig();
     const playerContext = memTankStats && memEncyclopedia
@@ -300,7 +303,7 @@ export function registerHandlers(): void {
 
   handle('replays:tank-maps', (tankName) => {
     const config = configService.getConfig();
-    const ctx = cacheService.getReplayTankContext(config.accountId, tankName as string);
+    const ctx = cacheService.getReplayTankContext(config.accountId, assertString(tankName, 'tankName'));
     return ctx?.mapStats ?? [];
   });
 
@@ -324,7 +327,11 @@ export function registerHandlers(): void {
 
   handle('replays:list', (limit, offset) => {
     const config = configService.getConfig();
-    return cacheService.getBattles(config.accountId, (limit as number) ?? 10, (offset as number) ?? 0);
+    return cacheService.getBattles(
+      config.accountId,
+      assertOptionalNumber(limit, 'limit', 10),
+      assertOptionalNumber(offset, 'offset', 0),
+    );
   });
 
   handle('replays:count', () => {
@@ -339,17 +346,17 @@ export function registerHandlers(): void {
 
   handle('replays:tank-stats', (sinceMs) => {
     const config = configService.getConfig();
-    return cacheService.getReplayTankStats(config.accountId, (sinceMs as number) ?? 0);
+    return cacheService.getReplayTankStats(config.accountId, assertOptionalNumber(sinceMs, 'sinceMs', 0));
   });
 
   handle('replays:economy', (days) => {
     const config = configService.getConfig();
-    return cacheService.getEconomyByDay(config.accountId, (days as number) ?? 30);
+    return cacheService.getEconomyByDay(config.accountId, assertOptionalNumber(days, 'days', 30));
   });
 
   handle('replays:sessions', (limit) => {
     const config = configService.getConfig();
-    return cacheService.getSessions(config.accountId, (limit as number) ?? 30);
+    return cacheService.getSessions(config.accountId, assertOptionalNumber(limit, 'limit', 30));
   });
 
   handle('shell:openExternal', (url) => {
