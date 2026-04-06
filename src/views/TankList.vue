@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAppStore } from '../stores/app';
+import { usePlayerStore } from '../stores/player';
+import { useTanksStore } from '../stores/tanks';
 import { getWn8Color, getWrColor } from '../utils/wn8';
 
-const store = useAppStore();
+const playerStore = usePlayerStore();
+const tanksStore = useTanksStore();
 const router = useRouter();
 
 const viewMode = ref<'all' | 'focus'>('all');
@@ -22,7 +24,7 @@ const typeLabels: Record<string, string> = {
 
 // Weighted player averages across all tanks
 const playerAvgWr = computed(() => {
-  const tanks = store.tankList.filter(t => t.battles > 0);
+  const tanks = tanksStore.tankList.filter(t => t.battles > 0);
   if (tanks.length === 0) return 0;
   const totalBattles = tanks.reduce((s, t) => s + t.battles, 0);
   const totalWins = tanks.reduce((s, t) => s + t.wins, 0);
@@ -30,7 +32,7 @@ const playerAvgWr = computed(() => {
 });
 
 const playerAvgWn8 = computed(() => {
-  const tanks = store.tankList.filter(t => t.battles > 0);
+  const tanks = tanksStore.tankList.filter(t => t.battles > 0);
   if (tanks.length === 0) return 0;
   const totalBattles = tanks.reduce((s, t) => s + t.battles, 0);
   const totalWn8 = tanks.reduce((s, t) => s + t.wn8 * t.battles, 0);
@@ -40,7 +42,7 @@ const playerAvgWn8 = computed(() => {
 const focusTanks = computed(() => {
   const avgWr = playerAvgWr.value;
   const avgWn8 = playerAvgWn8.value;
-  return store.tankList
+  return tanksStore.tankList
     .filter(t => t.battles >= 50)
     .map(t => ({ ...t, wrDeficit: avgWr - t.winRate, wn8Deficit: avgWn8 - t.wn8 }))
     .filter(t => t.wrDeficit > 3 || t.wn8Deficit > 150)
@@ -48,7 +50,7 @@ const focusTanks = computed(() => {
 });
 
 const filteredTanks = computed(() => {
-  let tanks = store.tankList;
+  let tanks = tanksStore.tankList;
   if (search.value) {
     const s = search.value.toLowerCase();
     tanks = tanks.filter(t => t.name.toLowerCase().includes(s));
@@ -59,7 +61,7 @@ const filteredTanks = computed(() => {
 });
 
 onMounted(async () => {
-  if (store.tankList.length === 0) await store.fetchTankList();
+  if (tanksStore.tankList.length === 0) await tanksStore.fetchTankList();
 });
 </script>
 
@@ -78,8 +80,8 @@ onMounted(async () => {
         </p>
       </div>
       <button
-        @click="store.fetchTankList()"
-        :disabled="store.loading"
+        @click="tanksStore.fetchTankList()"
+        :disabled="tanksStore.loading"
         class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-sm rounded-lg"
       >
         ↻ Refresh
@@ -131,7 +133,7 @@ onMounted(async () => {
     </div>
 
     <!-- Loading -->
-    <div v-if="store.loading" class="space-y-2">
+    <div v-if="tanksStore.loading" class="space-y-2">
       <div v-for="i in 10" :key="i" class="bg-gray-900 border border-gray-800 rounded-xl p-4 animate-pulse">
         <div class="h-4 bg-gray-700 rounded w-1/3"></div>
       </div>

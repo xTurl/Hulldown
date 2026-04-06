@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useAppStore } from '../stores/app';
+import { useConfigStore } from '../stores/config';
+import { usePlayerStore } from '../stores/player';
+import { useTanksStore } from '../stores/tanks';
 import type { AppConfig, CacheStats } from '../types';
 
-const store = useAppStore();
+const configStore = useConfigStore();
+const playerStore = usePlayerStore();
+const tanksStore = useTanksStore();
 const form = ref<AppConfig>({
-  wgApiKey: '', claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '',
+  claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '',
 });
 const saved = ref(false);
 const saving = ref(false);
@@ -49,10 +53,10 @@ async function save() {
     );
     await Promise.race([window.api.saveConfig({ ...form.value }), timeout]);
     await window.api.clearCache();
-    store.config = form.value;
-    store.playerInfo = null;
-    store.tankList = [];
-    await store.fetchPlayerInfo();
+    configStore.config = form.value;
+    playerStore.reset();
+    tanksStore.reset();
+    await playerStore.fetchPlayerInfo();
     cacheStats.value = await window.api.getCacheStats();
     saved.value = true;
     setTimeout(() => saved.value = false, 3500);
@@ -81,8 +85,8 @@ async function clearAndRescanBattles() {
 }
 
 onMounted(async () => {
-  if (store.config) {
-    form.value = { ...store.config };
+  if (configStore.config) {
+    form.value = { ...configStore.config };
   } else {
     const cfg = await window.api.getConfig();
     form.value = { ...cfg };

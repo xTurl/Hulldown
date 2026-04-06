@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAppStore } from '../stores/app';
+import { usePlayerStore } from '../stores/player';
+import { useTanksStore } from '../stores/tanks';
 import StatCard from '../components/StatCard.vue';
 import SessionCard from '../components/SessionCard.vue';
 import RecentBattles from '../components/RecentBattles.vue';
@@ -15,24 +16,25 @@ import type { ProgressSnapshot } from '../types';
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 
-const store = useAppStore();
+const playerStore = usePlayerStore();
+const tanksStore = useTanksStore();
 const router = useRouter();
 const syncing = ref(false);
 const progress = ref<ProgressSnapshot[]>([]);
 
 const winRate = computed(() => {
-  if (!store.playerInfo) return '0%';
-  const s = store.playerInfo.statistics;
+  if (!playerStore.playerInfo) return '0%';
+  const s = playerStore.playerInfo.statistics;
   return s.battles > 0 ? ((s.wins / s.battles) * 100).toFixed(1) + '%' : '0%';
 });
 
-const top5Tanks = computed(() => store.tankList.slice(0, 5));
+const top5Tanks = computed(() => tanksStore.tankList.slice(0, 5));
 
 const overallWnx = computed(() => {
-  if (store.tankList.length === 0) return 0;
+  if (tanksStore.tankList.length === 0) return 0;
   let totalBattles = 0;
   let totalWnxWeighted = 0;
-  for (const t of store.tankList) {
+  for (const t of tanksStore.tankList) {
     totalWnxWeighted += t.wnx * t.battles;
     totalBattles += t.battles;
   }
@@ -123,16 +125,16 @@ const chartOption = computed(() => {
 
 async function sync() {
   syncing.value = true;
-  await store.fetchTankList();
-  await store.fetchPlayerInfo();
+  await tanksStore.fetchTankList();
+  await playerStore.fetchPlayerInfo();
   progress.value = await window.api.getProgress();
   syncing.value = false;
 }
 
 onMounted(async () => {
   progress.value = await window.api.getProgress();
-  if (store.tankList.length === 0) {
-    await store.fetchTankList();
+  if (tanksStore.tankList.length === 0) {
+    await tanksStore.fetchTankList();
   }
 });
 </script>
@@ -156,19 +158,19 @@ onMounted(async () => {
     </div>
 
     <!-- Error -->
-    <div v-if="store.error" class="mb-4 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
-      {{ store.error }}
+    <div v-if="playerStore.error || tanksStore.error" class="mb-4 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+      {{ playerStore.error || tanksStore.error }}
     </div>
 
     <!-- Stat cards -->
-    <div v-if="store.playerInfo" class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-      <StatCard title="Total battles" :value="store.playerInfo.statistics.battles.toLocaleString('en-US')" subtitle="all tanks" />
+    <div v-if="playerStore.playerInfo" class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <StatCard title="Total battles" :value="playerStore.playerInfo.statistics.battles.toLocaleString('en-US')" subtitle="all tanks" />
       <StatCard title="Win Rate" :value="winRate" :color="getWrColor(parseFloat(winRate))" />
-      <StatCard title="WN8" :value="store.playerInfo.wn8 || 0" :color="getWn8Color(store.playerInfo.wn8 || 0)" subtitle="approximate" />
+      <StatCard title="WN8" :value="playerStore.playerInfo.wn8 || 0" :color="getWn8Color(playerStore.playerInfo.wn8 || 0)" subtitle="approximate" />
       <StatCard title="WNX" :value="overallWnx" :color="getWn8Color(overallWnx)" subtitle="with assist" />
-      <StatCard title="Tanks in garage" :value="store.tankList.length" subtitle="with battles" />
+      <StatCard title="Tanks in garage" :value="tanksStore.tankList.length" subtitle="with battles" />
     </div>
-    <div v-else-if="store.loading" class="grid grid-cols-5 gap-4 mb-6">
+    <div v-else-if="playerStore.loading" class="grid grid-cols-5 gap-4 mb-6">
       <div v-for="i in 5" :key="i" class="bg-gray-900 border border-gray-800 rounded-xl p-4 animate-pulse">
         <div class="h-3 bg-gray-700 rounded w-1/2 mb-2"></div>
         <div class="h-8 bg-gray-700 rounded w-3/4"></div>
@@ -202,7 +204,7 @@ onMounted(async () => {
           Show all →
         </button>
       </div>
-      <div v-if="store.loading" class="p-5 text-sm text-gray-400">Loading...</div>
+      <div v-if="tanksStore.loading" class="p-5 text-sm text-gray-400">Loading...</div>
       <div v-else-if="top5Tanks.length === 0" class="p-5 text-sm text-gray-400">
         Click "Sync" to fetch tank data.
       </div>

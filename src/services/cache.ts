@@ -3,7 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import type { ProgressSnapshot } from '../types';
 
-let db: Database.Database;
+let db: Database.Database | undefined;
 
 const RAW_COLUMNS = [
   'raw_wins INTEGER NOT NULL DEFAULT 0',
@@ -14,6 +14,13 @@ const RAW_COLUMNS = [
   'raw_spotted INTEGER NOT NULL DEFAULT 0',
   'raw_dropped_cp INTEGER NOT NULL DEFAULT 0',
 ];
+
+export function closeDb(): void {
+  if (db) {
+    db.close();
+    db = undefined;
+  }
+}
 
 function getDb(): Database.Database {
   if (!db) {

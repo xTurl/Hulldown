@@ -69,10 +69,10 @@ async function finish() {
     <div class="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
 
       <div class="flex justify-center mb-6">
-        <img :src="iconUrl" class="w-16 h-16" alt="WoT Stats" />
+        <img :src="iconUrl" class="w-16 h-16" alt="Hulldown" />
       </div>
 
-      <h1 class="text-2xl font-bold text-gray-100 text-center mb-1">Welcome to WoT Stats</h1>
+      <h1 class="text-2xl font-bold text-gray-100 text-center mb-1">Welcome to Hulldown</h1>
 
       <!-- Step indicators -->
       <div class="flex items-center justify-center gap-2 mb-8 mt-3">

@@ -38,7 +38,7 @@ const config: ForgeConfig = {
         }
         // Copy app icon so the .desktop file always finds it
         const iconSrc = path.join(__dirname, 'node_modules/electron-installer-debian/resources/icon.png');
-        const iconDest = path.join(outputPath, 'wot-stats.png');
+        const iconDest = path.join(outputPath, 'hulldown.png');
         if (fs.existsSync(iconSrc) && !fs.existsSync(iconDest)) {
           fs.copyFileSync(iconSrc, iconDest);
         }
@@ -84,8 +84,8 @@ const config: ForgeConfig = {
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
-      [FuseV1Options.OnlyLoadAppFromAsar]: false,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+      [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
   ],
 };

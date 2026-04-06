@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useAppStore } from '../stores/app';
+import { useTanksStore } from '../stores/tanks';
 import { getWn8Color, getWrColor } from '../utils/wn8';
 import type { Tank } from '../types';
 
-const store = useAppStore();
+const tanksStore = useTanksStore();
 
 const typeLabels: Record<string, string> = {
   'heavyTank': 'Heavy', 'mediumTank': 'Medium', 'lightTank': 'Light',
@@ -19,15 +19,15 @@ const showDropA = ref(false);
 const showDropB = ref(false);
 
 const filteredA = computed(() => {
-  if (!searchA.value) return store.tankList.slice(0, 8);
+  if (!searchA.value) return tanksStore.tankList.slice(0, 8);
   const s = searchA.value.toLowerCase();
-  return store.tankList.filter(t => t.name.toLowerCase().includes(s)).slice(0, 8);
+  return tanksStore.tankList.filter(t => t.name.toLowerCase().includes(s)).slice(0, 8);
 });
 
 const filteredB = computed(() => {
-  if (!searchB.value) return store.tankList.slice(0, 8);
+  if (!searchB.value) return tanksStore.tankList.slice(0, 8);
   const s = searchB.value.toLowerCase();
-  return store.tankList.filter(t => t.name.toLowerCase().includes(s)).slice(0, 8);
+  return tanksStore.tankList.filter(t => t.name.toLowerCase().includes(s)).slice(0, 8);
 });
 
 function selectA(t: Tank) {
@@ -97,7 +97,7 @@ const scoreB = computed(() => statRows.value.filter(r => {
 }).length);
 
 onMounted(async () => {
-  if (store.tankList.length === 0) await store.fetchTankList();
+  if (tanksStore.tankList.length === 0) await tanksStore.fetchTankList();
 });
 </script>
 

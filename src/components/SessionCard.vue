@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue';
 import type { ProgressSnapshot } from '../types';
 import type { TodaySession } from '../services/cache';
 import { calculateWn8, calculateWnx, getWn8Color, getWrColor } from '../utils/wn8';
-import { useAppStore } from '../stores/app';
+import { useConfigStore } from '../stores/config';
 
 const props = defineProps<{
   snapshots: ProgressSnapshot[];
@@ -11,7 +11,7 @@ const props = defineProps<{
   syncing: boolean;
 }>();
 
-const store = useAppStore();
+const configStore = useConfigStore();
 const replaySession = ref<TodaySession | null>(null);
 const loading = ref(false);
 
@@ -25,7 +25,7 @@ async function fetchSession() {
 }
 
 watch(() => props.syncing, (syncing) => { if (!syncing) fetchSession(); });
-watch(() => store.config?.username, (newVal, oldVal) => {
+watch(() => configStore.config?.username, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) { replaySession.value = null; fetchSession(); }
 });
 

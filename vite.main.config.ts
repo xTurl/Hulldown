@@ -1,11 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import path from 'path';
 
-export default defineConfig({
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-  build: {
-    rollupOptions: {
-      external: ['better-sqlite3', 'electron'],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
+    resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+    define: {
+      'process.env.WG_API_KEY': JSON.stringify(env.WG_API_KEY || ''),
     },
-  },
+    build: {
+      rollupOptions: {
+        external: ['better-sqlite3', 'electron'],
+      },
+    },
+  };
 });

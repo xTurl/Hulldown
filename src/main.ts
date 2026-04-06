@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import started from 'electron-squirrel-startup';
 import { registerHandlers } from './ipc/handlers';
+import { closeDb } from './services/cache';
 
 if (started) app.quit();
 
@@ -16,10 +17,11 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: true,
     },
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL && !app.isPackaged) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
@@ -29,6 +31,10 @@ const createWindow = () => {
 app.on('ready', () => {
   registerHandlers();
   createWindow();
+});
+
+app.on('before-quit', () => {
+  closeDb();
 });
 
 app.on('window-all-closed', () => {

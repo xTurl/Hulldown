@@ -9,6 +9,7 @@ import { calculateWn8, calculateWnx } from '../utils/wn8';
 import type { Tank, TankDetails, BattleRecord } from '../types';
 
 const ONE_HOUR = 60 * 60 * 1000;
+const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 
 // In-memory cache for expensive WG API responses — cleared on app restart or manual cache clear
 let memTankStats: wgService.WgTankStat[] | null = null;
@@ -21,14 +22,37 @@ function clearMemCache() {
   memFetchedAt = 0;
 }
 
+/** Wraps an IPC handler so all errors are caught and logged before re-throwing. */
+function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
+  ipcMain.handle(channel, async (_event, ...args) => {
+    try {
+      return await fn(...args);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[IPC:${channel}]`, msg);
+      throw e;
+    }
+  });
+}
+
+const WG_API_KEY = process.env.WG_API_KEY || '';
+
 async function getWgData(config: ReturnType<typeof configService.getConfig>) {
   if (memTankStats && memEncyclopedia && Date.now() - memFetchedAt < ONE_HOUR) {
     return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
   }
-  const [tankStats, encyclopedia] = await Promise.all([
-    wgService.getPlayerTankStats(config.accountId, config.wgApiKey, config.region),
-    wgService.getVehicleEncyclopedia(config.wgApiKey, config.region),
-  ]);
+  let tankStats: wgService.WgTankStat[];
+  let encyclopedia: Record<number, wgService.WgVehicle>;
+  try {
+    [tankStats, encyclopedia] = await Promise.all([
+      wgService.getPlayerTankStats(config.accountId, WG_API_KEY, config.region),
+      wgService.getVehicleEncyclopedia(WG_API_KEY, config.region),
+    ]);
+  } catch (e) {
+    // Don't cache failed requests
+    clearMemCache();
+    throw e;
+  }
   memTankStats = tankStats;
   memEncyclopedia = encyclopedia;
   memFetchedAt = Date.now();
@@ -138,24 +162,23 @@ function isValidTankDetails(data: unknown): boolean {
 }
 
 export function registerHandlers(): void {
-  ipcMain.handle('config:get', () => configService.getConfig());
+  handle('config:get', () => configService.getConfig());
 
-  ipcMain.handle('config:save', async (_event, config) => {
+  handle('config:save', (config) => {
     clearMemCache();
-    configService.saveConfig(config);
+    configService.saveConfig(config as Parameters<typeof configService.saveConfig>[0]);
   });
 
-  ipcMain.handle('player:search', async (_event, username: string, region: string) => {
-    const config = configService.getConfig();
-    return wgService.searchPlayer(username, config.wgApiKey, region);
-  });
+  handle('player:search', (username, region) =>
+    wgService.searchPlayer(username as string, WG_API_KEY, region as string)
+  );
 
-  ipcMain.handle('player:info', async () => {
+  handle('player:info', async () => {
     const cached = cacheService.getPlayerInfo();
     if (cached && Date.now() - cached.updatedAt < ONE_HOUR) return cached.data;
 
     const config = configService.getConfig();
-    const playerInfo = await wgService.getPlayerInfo(config.accountId, config.wgApiKey, config.region);
+    const playerInfo = await wgService.getPlayerInfo(config.accountId, WG_API_KEY, config.region);
     const stats = playerInfo.statistics.all;
     const wn8 = calculateWn8(stats);
     const result = {
@@ -168,7 +191,6 @@ export function registerHandlers(): void {
     };
     cacheService.savePlayerInfo(result);
 
-    // Save progress snapshot only when battles count increased
     const last = cacheService.getLastProgressSnapshot(config.accountId);
     if (!last || stats.battles > last.battles) {
       cacheService.saveProgressSnapshot({
@@ -191,43 +213,42 @@ export function registerHandlers(): void {
     return result;
   });
 
-  ipcMain.handle('tanks:list', async () => {
+  handle('tanks:list', async () => {
     const config = configService.getConfig();
     const { tankStats, encyclopedia } = await getWgData(config);
 
-    // Backfill WNX for all snapshots that were saved before tank data was available
     cacheService.backfillMissingWnx(computeOverallWnx(tankStats));
 
-    const tanks: Tank[] = tankStats
+    return tankStats
       .filter(t => t.all.battles > 0)
       .map(t => buildTank(t, encyclopedia[t.tank_id]))
       .sort((a, b) => b.battles - a.battles);
-
-    return tanks;
   });
 
-  ipcMain.handle('tanks:details', async (_event, tankId: number) => {
-    const cached = cacheService.getTankDetails(tankId);
+  handle('tanks:details', async (tankId) => {
+    const id = tankId as number;
+    const cached = cacheService.getTankDetails(id);
     if (cached && isValidTankDetails(cached.data)) return cached.data;
 
     const config = configService.getConfig();
     const { tankStats, encyclopedia } = await getWgData(config);
-    const tankStat = tankStats.find(t => t.tank_id === tankId);
-    if (!tankStat) throw new Error(`Tank ${tankId} not found`);
+    const tankStat = tankStats.find(t => t.tank_id === id);
+    if (!tankStat) throw new Error(`Tank ${id} not found`);
 
     const details: TankDetails = {
-      ...buildTank(tankStat, encyclopedia[tankId]),
+      ...buildTank(tankStat, encyclopedia[id]),
       mapStats: (cached?.data as TankDetails | undefined)?.mapStats ?? [],
       recommendations: (cached?.data as TankDetails | undefined)?.recommendations ?? null,
       rawStats: tankStat.all as unknown as Record<string, number>,
     };
 
-    cacheService.saveTankDetails(tankId, details);
+    cacheService.saveTankDetails(id, details);
     return details;
   });
 
-  ipcMain.handle('tanks:recommendations', async (_event, tankId: number, force = false) => {
-    const cached = cacheService.getTankDetails(tankId);
+  handle('tanks:recommendations', async (tankId, force) => {
+    const id = tankId as number;
+    const cached = cacheService.getTankDetails(id);
     if (!cached) throw new Error('Tank details not loaded yet');
 
     const details = cached.data as TankDetails;
@@ -245,50 +266,50 @@ export function registerHandlers(): void {
     );
 
     const updated: TankDetails = { ...details, recommendations };
-    cacheService.saveTankDetails(tankId, updated);
+    cacheService.saveTankDetails(id, updated);
     return updated;
   });
 
-  ipcMain.handle('cache:clear', () => {
+  handle('cache:clear', () => {
     clearMemCache();
     cacheService.clearAll();
   });
 
-  ipcMain.handle('cache:stats', () => cacheService.getStats());
+  handle('cache:stats', () => cacheService.getStats());
 
-  ipcMain.handle('progress:list', () => {
+  handle('progress:list', () => {
     const config = configService.getConfig();
     return cacheService.getProgressSnapshots(config.accountId);
   });
 
-  ipcMain.handle('news:fetch', async () => {
+  handle('news:fetch', () => {
     const config = configService.getConfig();
     return newsService.fetchNews(config.region);
   });
 
-  ipcMain.handle('session:today', () => {
+  handle('session:today', () => {
     const config = configService.getConfig();
     return cacheService.getTodaySession(config.accountId);
   });
 
-  ipcMain.handle('player:detect', () => {
+  handle('player:detect', () => {
     const config = configService.getConfig();
     if (!config.replaysDir) return null;
     return replayParser.detectPlayerFromReplays(config.replaysDir);
   });
 
-  ipcMain.handle('replays:tank-maps', (_event, tankName: string) => {
+  handle('replays:tank-maps', (tankName) => {
     const config = configService.getConfig();
-    const ctx = cacheService.getReplayTankContext(config.accountId, tankName);
+    const ctx = cacheService.getReplayTankContext(config.accountId, tankName as string);
     return ctx?.mapStats ?? [];
   });
 
-  ipcMain.handle('replays:clear', () => {
+  handle('replays:clear', () => {
     const config = configService.getConfig();
     cacheService.clearBattles(config.accountId);
   });
 
-  ipcMain.handle('replays:scan', () => {
+  handle('replays:scan', () => {
     const config = configService.getConfig();
     if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
     const knownIds = cacheService.getKnownArenaIds(config.accountId);
@@ -301,35 +322,47 @@ export function registerHandlers(): void {
     );
   });
 
-  ipcMain.handle('replays:list', (_event, limit: number = 10, offset: number = 0) => {
+  handle('replays:list', (limit, offset) => {
     const config = configService.getConfig();
-    return cacheService.getBattles(config.accountId, limit, offset);
+    return cacheService.getBattles(config.accountId, (limit as number) ?? 10, (offset as number) ?? 0);
   });
 
-  ipcMain.handle('replays:count', () => {
+  handle('replays:count', () => {
     const config = configService.getConfig();
     return cacheService.getBattlesCount(config.accountId);
   });
 
-  ipcMain.handle('replays:map-stats', () => {
+  handle('replays:map-stats', () => {
     const config = configService.getConfig();
     return cacheService.getReplayMapStats(config.accountId);
   });
 
-  ipcMain.handle('replays:tank-stats', (_event, sinceMs: number = 0) => {
+  handle('replays:tank-stats', (sinceMs) => {
     const config = configService.getConfig();
-    return cacheService.getReplayTankStats(config.accountId, sinceMs);
+    return cacheService.getReplayTankStats(config.accountId, (sinceMs as number) ?? 0);
   });
 
-  ipcMain.handle('replays:economy', (_event, days: number = 30) => {
+  handle('replays:economy', (days) => {
     const config = configService.getConfig();
-    return cacheService.getEconomyByDay(config.accountId, days);
+    return cacheService.getEconomyByDay(config.accountId, (days as number) ?? 30);
   });
 
-  ipcMain.handle('replays:sessions', (_event, limit: number = 30) => {
+  handle('replays:sessions', (limit) => {
     const config = configService.getConfig();
-    return cacheService.getSessions(config.accountId, limit);
+    return cacheService.getSessions(config.accountId, (limit as number) ?? 30);
   });
 
-  ipcMain.handle('shell:openExternal', (_event, url: string) => shell.openExternal(url));
+  handle('shell:openExternal', (url) => {
+    const urlStr = url as string;
+    let parsed: URL;
+    try {
+      parsed = new URL(urlStr);
+    } catch {
+      throw new Error(`Invalid URL: ${urlStr}`);
+    }
+    if (!ALLOWED_PROTOCOLS.includes(parsed.protocol)) {
+      throw new Error(`Disallowed URL protocol: ${parsed.protocol}`);
+    }
+    return shell.openExternal(urlStr);
+  });
 }

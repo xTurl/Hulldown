@@ -1,5 +1,4 @@
 export interface AppConfig {
-  wgApiKey: string;
   claudeApiKey: string;
   accountId: number;
   username: string;

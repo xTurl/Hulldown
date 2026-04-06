@@ -1,25 +1,27 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useAppStore } from './stores/app';
+import { useConfigStore } from './stores/config';
+import { usePlayerStore } from './stores/player';
 import Sidebar from './components/Sidebar.vue';
 import Setup from './views/Setup.vue';
 
-const store = useAppStore();
+const configStore = useConfigStore();
+const playerStore = usePlayerStore();
 const needsSetup = ref(false);
 
 onMounted(async () => {
-  await store.loadConfig();
-  if (!store.config?.username || !store.config?.accountId) {
+  await configStore.loadConfig();
+  if (!configStore.config?.username || !configStore.config?.accountId) {
     needsSetup.value = true;
     return;
   }
-  await store.fetchPlayerInfo();
+  await playerStore.fetchPlayerInfo();
 });
 
 async function onSetupComplete() {
   needsSetup.value = false;
-  await store.loadConfig();
-  await store.fetchPlayerInfo();
+  await configStore.loadConfig();
+  await playerStore.fetchPlayerInfo();
 }
 </script>
 

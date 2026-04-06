@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useAppStore } from '../stores/app';
+import { usePlayerStore } from '../stores/player';
+import { useTanksStore } from '../stores/tanks';
 import { tutorials } from '../data/tutorials';
 import TutorialCard from '../components/TutorialCard.vue';
 
-const store = useAppStore();
+const playerStore = usePlayerStore();
+const tanksStore = useTanksStore();
 const expanded = ref<string | null>(null);
 
 function toggle(id: string) {
@@ -12,8 +14,8 @@ function toggle(id: string) {
 }
 
 const weakStats = computed(() => {
-  const info = store.playerInfo;
-  const tanks = store.tankList;
+  const info = playerStore.playerInfo;
+  const tanks = tanksStore.tankList;
   if (!info) return {} as Record<string, boolean>;
 
   const s = info.statistics;
@@ -88,7 +90,7 @@ const difficultyColor: Record<string, string> = {
     </div>
 
     <!-- No stats yet -->
-    <div v-else-if="!store.playerInfo" class="mb-6 px-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-400">
+    <div v-else-if="!playerStore.playerInfo" class="mb-6 px-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-400">
       Sync your stats on the Dashboard to get personalised recommendations.
     </div>
 
