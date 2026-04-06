@@ -1,7 +1,7 @@
 {
   "name": "hulldown",
   "productName": "hulldown",
-  "version": "1.0.3",
+  "version": "1.0.2",
   "description": "AI-Powered desktop app with your WoT statistics.",
   "main": ".vite/build/main.js",
   "private": true,
@@ -50,5 +50,9 @@
     "pinia": "^3.0.4",
     "vue": "^3.5.31",
     "vue-router": "^5.0.4"
+  },
+  "optionalDependencies": {
+    "@esbuild/linux-arm64": "^0.28.0",
+    "@esbuild/linux-x64": "^0.28.0"
   }
 }
