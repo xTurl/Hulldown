@@ -1,0 +1,38 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        run: npm run make
+
+      - name: Rename installer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path "out/make/squirrel.windows/x64/" -Filter "*Setup*.exe" | Select-Object -First 1
+          Rename-Item $exe.FullName "Hulldown-Setup.exe"
+
+      - name: Publish release to hulldown-releases
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: xTurl/hulldown-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: Hulldown ${{ github.ref_name }}
+          files: out/make/squirrel.windows/x64/Hulldown-Setup.exe
