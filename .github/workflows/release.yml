@@ -24,6 +24,8 @@ jobs:
 
       - name: Build installer
         run: npm run make
+        env:
+          WG_API_KEY: ${{ secrets.WG_API_KEY }}
 
       - name: Rename installer
         shell: pwsh
