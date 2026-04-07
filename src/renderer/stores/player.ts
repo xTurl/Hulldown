@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { PlayerInfo } from '../types';
+import type { PlayerInfo } from '../../shared/types';
 
 export const usePlayerStore = defineStore('player', () => {
   const playerInfo = ref<PlayerInfo | null>(null);

@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useConfigStore } from '../stores/config';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
-import type { AppConfig, CacheStats } from '../types';
+import type { AppConfig, CacheStats } from '../../shared/types';
 
 const configStore = useConfigStore();
 const playerStore = usePlayerStore();

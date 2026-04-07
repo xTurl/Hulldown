@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { BattleRecord } from '../types';
+import type { BattleRecord } from '../../shared/types';
 
 export type ParsedBattle = Omit<BattleRecord, 'id' | 'accountId'>;
 

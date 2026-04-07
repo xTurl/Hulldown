@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { Tank } from '../types';
+import type { Tank } from '../../shared/types';
 
 export const useTanksStore = defineStore('tanks', () => {
   const tankList = ref<Tank[]>([]);

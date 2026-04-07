@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Tank, MapStat, AIRecommendations } from '../types';
+import type { Tank, MapStat, AIRecommendations } from '../../shared/types';
 import type { ReplayTankContext } from './cache';
 
 interface TankWithAssisted extends Omit<Tank, 'avgDamageAssisted' | 'avgDamageAssistedTrack'> {

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import type { ProgressSnapshot } from '../types';
+import type { ProgressSnapshot } from '../../shared/types';
 
 let db: Database.Database | undefined;
 

@@ -1,4 +1,4 @@
-import type { AppConfig } from '../types';
+import type { AppConfig } from '../../shared/types';
 
 export function assertString(value: unknown, name: string): string {
   if (typeof value !== 'string') {

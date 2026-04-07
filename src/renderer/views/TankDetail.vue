@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { getWn8Color, getWrColor } from '../utils/wn8';
+import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import StatCard from '../components/StatCard.vue';
-import type { TankDetails } from '../types';
+import type { TankDetails } from '../../shared/types';
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();

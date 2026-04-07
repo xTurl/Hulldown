@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import iconUrl from '../../assets/icon.svg';
+import iconUrl from '../../../assets/icon.svg';
 
 const emit = defineEmits<{ complete: [] }>();
 

@@ -1,6 +1,6 @@
 import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord } from './index';
-import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession } from '../services/cache';
-import type { DetectedPlayer } from '../services/replay-parser';
+import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession } from '../../main/services/cache';
+import type { DetectedPlayer } from '../../main/services/replay-parser';
 
 declare global {
   interface Window {

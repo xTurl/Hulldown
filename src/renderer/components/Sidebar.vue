@@ -2,7 +2,7 @@
 import { useRouter, useRoute } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useConfigStore } from '../stores/config';
-import { getWn8Color, getWn8Label } from '../utils/wn8';
+import { getWn8Color, getWn8Label } from '../../shared/utils/wn8';
 import { computed } from 'vue';
 
 const router = useRouter();

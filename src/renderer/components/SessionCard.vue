@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { ProgressSnapshot } from '../types';
-import type { TodaySession } from '../services/cache';
-import { calculateWn8, calculateWnx, getWn8Color, getWrColor } from '../utils/wn8';
+import type { ProgressSnapshot } from '../../shared/types';
+import type { TodaySession } from '../../main/services/cache';
+import { calculateWn8, calculateWnx, getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import { useConfigStore } from '../stores/config';
 
 const props = defineProps<{

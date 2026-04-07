@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../services/cache';
-import { getWn8Color } from '../utils/wn8';
+import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../../main/services/cache';
+import { getWn8Color } from '../../shared/utils/wn8';
 
 type Tab = 'economy' | 'maps' | 'tanks' | 'sessions';
 const activeTab = ref<Tab>('economy');

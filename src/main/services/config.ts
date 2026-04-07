@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import type { AppConfig } from '../types';
+import type { AppConfig } from '../../shared/types';
 
 const DEFAULT_CONFIG: AppConfig = {
   claudeApiKey: '',

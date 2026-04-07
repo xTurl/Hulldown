@@ -5,9 +5,9 @@ import * as wgService from '../services/wargaming';
 import * as newsService from '../services/news';
 import * as claudeService from '../services/claude';
 import * as replayParser from '../services/replay-parser';
-import { calculateWn8, calculateWnx } from '../utils/wn8';
+import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
-import type { Tank, TankDetails, BattleRecord } from '../types';
+import type { Tank, TankDetails, BattleRecord } from '../../shared/types';
 
 const ONE_HOUR = 60 * 60 * 1000;
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];

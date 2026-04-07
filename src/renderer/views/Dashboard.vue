@@ -6,13 +6,13 @@ import { useTanksStore } from '../stores/tanks';
 import StatCard from '../components/StatCard.vue';
 import SessionCard from '../components/SessionCard.vue';
 import RecentBattles from '../components/RecentBattles.vue';
-import { getWn8Color, getWrColor } from '../utils/wn8';
+import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import VChart from 'vue-echarts';
-import type { ProgressSnapshot } from '../types';
+import type { ProgressSnapshot } from '../../shared/types';
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 

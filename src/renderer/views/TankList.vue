@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
-import { getWn8Color, getWrColor } from '../utils/wn8';
+import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
 
 const playerStore = usePlayerStore();
 const tanksStore = useTanksStore();

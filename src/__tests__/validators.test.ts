@@ -5,7 +5,7 @@ import {
   assertOptionalNumber,
   assertBoolean,
   assertConfig,
-} from '../ipc/validators';
+} from '../main/ipc/validators';
 
 // ---------------------------------------------------------------------------
 // assertString

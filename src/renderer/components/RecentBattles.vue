@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { BattleRecord } from '../types';
-import { calculateWn8, calculateWnx, getWn8Color } from '../utils/wn8';
+import type { BattleRecord } from '../../shared/types';
+import { calculateWn8, calculateWnx, getWn8Color } from '../../shared/utils/wn8';
 
 const PAGE_SIZE = 10;
 

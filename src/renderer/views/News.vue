@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { NewsItem } from '../types';
+import type { NewsItem } from '../../shared/types';
 
 const items = ref<NewsItem[]>([]);
 const loading = ref(false);

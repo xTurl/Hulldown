@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { AppConfig } from '../types';
+import type { AppConfig } from '../../shared/types';
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<AppConfig | null>(null);

@@ -8,7 +8,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/renderer/*"], "@shared/*": ["./src/shared/*"] }
   },
   "include": ["src/**/*", "*.ts"],
   "exclude": ["node_modules"]
