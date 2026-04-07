@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import started from 'electron-squirrel-startup';
 import { registerHandlers } from './ipc/handlers';
@@ -29,6 +29,7 @@ const createWindow = () => {
 };
 
 app.on('ready', () => {
+  Menu.setApplicationMenu(null);
   registerHandlers();
   createWindow();
 });
