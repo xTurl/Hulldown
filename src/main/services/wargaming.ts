@@ -95,6 +95,34 @@ export async function searchPlayer(username: string, apiKey: string, region: str
   return (data.data as WgPlayerSearchResult[]) || [];
 }
 
+export interface Wn8ExpEntry {
+  tankId: number;
+  expDmg: number;
+  expFrag: number;
+  expSpot: number;
+  expDef: number;
+  expWinRate: number; // fraction 0–1
+}
+
+export async function getWn8ExpectedValues(): Promise<Map<number, Wn8ExpEntry>> {
+  const data = await fetchJson(
+    'https://static.modxvm.com/wn8-data-exp/json/wn8exp.json',
+    15000,
+  ) as { data: Array<{ IDNum: number; expDef: number; expFrag: number; expSpot: number; expDamage: number; expWinRate: number }> };
+  const map = new Map<number, Wn8ExpEntry>();
+  for (const item of data.data) {
+    map.set(item.IDNum, {
+      tankId:     item.IDNum,
+      expDmg:     item.expDamage,
+      expFrag:    item.expFrag,
+      expSpot:    item.expSpot,
+      expDef:     item.expDef,
+      expWinRate: item.expWinRate / 100,
+    });
+  }
+  return map;
+}
+
 export async function getVehicleEncyclopedia(apiKey: string, region: string, tankIds?: number[]): Promise<Record<number, WgVehicle>> {
   const base = getBaseUrl(region);
   const params: Record<string, unknown> = {

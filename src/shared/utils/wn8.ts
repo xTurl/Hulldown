@@ -33,44 +33,91 @@ export function getWrColor(winRate: number): string {
   return '#793db6';
 }
 
-export function calculateWn8(stats: {
-  battles: number; wins: number; damage_dealt: number;
-  frags: number; spotted: number; dropped_capture_points: number;
-}): number {
-  if (stats.battles === 0) return 0;
-  const wr = stats.wins / stats.battles;
-  const dmg = stats.damage_dealt / stats.battles;
-  return Math.max(0, Math.round(dmg * 0.8 + wr * 2000 - 1000));
+export interface Wn8Expected {
+  expDmg: number;     // expected direct damage per battle
+  expFrag: number;    // expected kills per battle
+  expSpot: number;    // expected spotted per battle
+  expDef: number;     // expected defence (dropped capture) per battle
+  expWinRate: number; // expected win rate as fraction (0–1)
 }
 
 /**
- * Przybliżone WNX — metryka tomato.gg uwzględniająca assisted damage
- * (spotting radio + tracking). Dzięki temu lekkie czołgi i spoty
- * są oceniane sprawiedliwiej niż w WN8.
- *
- * Formuła oficjalna jest własnością tomato.gg i nie jest publiczna.
- * Tutaj: effectiveDmg = directDmg + assistedDmg * 0.5, reszta jak WN8.
+ * Real WN8 formula per XVM specification.
+ * Requires per-tank expected values (Wn8Expected) for accurate results.
+ * Falls back to a rough approximation when expected values are unavailable.
  */
-export function calculateWnx(stats: {
-  battles: number;
-  wins: number;
-  damage_dealt: number;
-  frags: number;
-  spotted: number;
-  dropped_capture_points: number;
-  // WG API zwraca te pola już jako wartości per bitwę (avg_*)
-  avg_damage_assisted_radio?: number;
-  avg_damage_assisted?: number;
-  avg_damage_assisted_track?: number;
-}): number {
+export function calculateWn8(
+  stats: {
+    battles: number;
+    wins: number;
+    damage_dealt: number;
+    frags: number;
+    spotted: number;
+    dropped_capture_points: number;
+  },
+  exp?: Wn8Expected,
+): number {
   if (stats.battles === 0) return 0;
 
-  const directDmg = stats.damage_dealt / stats.battles;
+  if (!exp) {
+    // Rough fallback — used only when expected values cannot be fetched
+    const wr = stats.wins / stats.battles;
+    const dmg = stats.damage_dealt / stats.battles;
+    return Math.max(0, Math.round(dmg * 0.8 + wr * 2000 - 1000));
+  }
+
+  const n = stats.battles;
+  // Guard against 0/0 = NaN when both actual and expected value are 0
+  const safeRatio = (actual: number, expected: number) =>
+    expected > 0 ? actual / expected : (actual > 0 ? 2.0 : 0);
+
+  const rDmg = safeRatio(stats.damage_dealt / n, exp.expDmg);
+  const rFrag = safeRatio(stats.frags       / n, exp.expFrag);
+  const rSpot = safeRatio(stats.spotted     / n, exp.expSpot);
+  const rDef  = safeRatio(stats.dropped_capture_points / n, exp.expDef);
+  const rWin  = safeRatio(stats.wins        / n, exp.expWinRate);
+
+  // XVM reference formula — https://wiki.modxvm.com/en/WN8
+  const rDmgN = Math.max(0, (rDmg - 0.22) / 0.78);
+  const rFragN = Math.max(0, Math.min(rDmg + 0.2, 1.5) * (rFrag - 0.12) / 0.88);
+  const rSpotN = Math.max(0, Math.min(rDmg + 0.1, 1.3) * (rSpot - 0.38) / 0.62);
+  const rDefN  = Math.max(0, Math.min(rDmg + 0.1, 1.0) * (rDef  - 0.10) / 0.90);
+  const rWinN  = Math.max(0, (rWin - 0.71) / 0.29);
+
+  return Math.max(0, Math.round(
+    980 * rDmgN + 210 * rFragN + 155 * rSpotN + 75 * rDefN + 145 * Math.min(1.8, rWinN),
+  ));
+}
+
+/**
+ * WNX — WN8 variant that credits assisted damage (spotting + tracking).
+ * Uses effectiveDmg = directDmg + (radio + track assist) * 0.5 in place of directDmg,
+ * keeping expected values the same so light tanks / scouts get a fairer rating.
+ *
+ * The assistedRadio / assistedTrack fields must be per-battle averages (as returned by the WG API).
+ */
+export function calculateWnx(
+  stats: {
+    battles: number;
+    wins: number;
+    damage_dealt: number;
+    frags: number;
+    spotted: number;
+    dropped_capture_points: number;
+    avg_damage_assisted_radio?: number;
+    avg_damage_assisted?: number;
+    avg_damage_assisted_track?: number;
+  },
+  exp?: Wn8Expected,
+): number {
+  if (stats.battles === 0) return 0;
+
   const assistedRadio = stats.avg_damage_assisted_radio ?? stats.avg_damage_assisted ?? 0;
   const assistedTrack = stats.avg_damage_assisted_track ?? 0;
+  const effectiveDmg = stats.damage_dealt / stats.battles + (assistedRadio + assistedTrack) * 0.5;
 
-  const effectiveDmg = directDmg + (assistedRadio + assistedTrack) * 0.5;
-  const wr = stats.wins / stats.battles;
-
-  return Math.max(0, Math.round(effectiveDmg * 0.8 + wr * 2000 - 1000));
+  return calculateWn8(
+    { ...stats, damage_dealt: Math.round(effectiveDmg * stats.battles) },
+    exp,
+  );
 }

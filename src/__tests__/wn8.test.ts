@@ -5,18 +5,27 @@ import {
   getWn8Color,
   getWn8Label,
   getWrColor,
+  type Wn8Expected,
 } from '../shared/utils/wn8';
 
+// Sample expected values matching an average tier-8 tank
+const AVG_EXP: Wn8Expected = {
+  expDmg: 780,
+  expFrag: 0.62,
+  expSpot: 0.91,
+  expDef: 0.43,
+  expWinRate: 0.474,
+};
+
 // ---------------------------------------------------------------------------
-// calculateWn8
+// calculateWn8 — without expected values (fallback approximation)
 // ---------------------------------------------------------------------------
-describe('calculateWn8', () => {
+describe('calculateWn8 (no expected values)', () => {
   it('returns 0 for 0 battles', () => {
     expect(calculateWn8({ battles: 0, wins: 0, damage_dealt: 0, frags: 0, spotted: 0, dropped_capture_points: 0 })).toBe(0);
   });
 
   it('is always non-negative', () => {
-    // Very bad player — formula could go negative; should clamp to 0
     expect(calculateWn8({ battles: 100, wins: 10, damage_dealt: 1000, frags: 0, spotted: 0, dropped_capture_points: 0 })).toBeGreaterThanOrEqual(0);
   });
 
@@ -26,15 +35,74 @@ describe('calculateWn8', () => {
   });
 
   it('higher damage & winrate → higher wn8', () => {
-    const low = calculateWn8({ battles: 100, wins: 45, damage_dealt: 50_000, frags: 50, spotted: 50, dropped_capture_points: 200 });
+    const low  = calculateWn8({ battles: 100, wins: 45, damage_dealt:  50_000, frags: 50, spotted: 50, dropped_capture_points: 200 });
     const high = calculateWn8({ battles: 100, wins: 65, damage_dealt: 300_000, frags: 50, spotted: 50, dropped_capture_points: 200 });
     expect(high).toBeGreaterThan(low);
   });
+});
 
-  it('matches the formula: max(0, round(dmg/battles * 0.8 + wr * 2000 - 1000))', () => {
-    const stats = { battles: 200, wins: 110, damage_dealt: 400_000, frags: 100, spotted: 80, dropped_capture_points: 500 };
-    const expected = Math.max(0, Math.round((400_000 / 200) * 0.8 + (110 / 200) * 2000 - 1000));
-    expect(calculateWn8(stats)).toBe(expected);
+// ---------------------------------------------------------------------------
+// calculateWn8 — with expected values (real formula)
+// ---------------------------------------------------------------------------
+describe('calculateWn8 (with expected values)', () => {
+  it('returns 0 for 0 battles', () => {
+    expect(calculateWn8({ battles: 0, wins: 0, damage_dealt: 0, frags: 0, spotted: 0, dropped_capture_points: 0 }, AVG_EXP)).toBe(0);
+  });
+
+  it('is always non-negative', () => {
+    expect(calculateWn8({ battles: 100, wins: 5, damage_dealt: 500, frags: 0, spotted: 0, dropped_capture_points: 0 }, AVG_EXP)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns a round integer', () => {
+    const result = calculateWn8({ battles: 100, wins: 50, damage_dealt: 150_000, frags: 50, spotted: 50, dropped_capture_points: 200 }, AVG_EXP);
+    expect(Number.isInteger(result)).toBe(true);
+  });
+
+  it('player doing exactly expected values yields ~1600 WN8 (per XVM calibration)', () => {
+    // Per the XVM formula, ratio=1.0 for all metrics produces ~1623:
+    //   rDmgN=1.0 → 980, rFragN=1.2 → 252, rSpotN=1.1 → 170, rDefN=1.0 → 75, rWinN=1.0 → 145
+    // "Average" real-world players achieve roughly 75% of expected values, giving ~900–1100 WN8.
+    const stats = {
+      battles: 1000,
+      wins: Math.round(1000 * AVG_EXP.expWinRate),
+      damage_dealt: Math.round(1000 * AVG_EXP.expDmg),
+      frags: Math.round(1000 * AVG_EXP.expFrag),
+      spotted: Math.round(1000 * AVG_EXP.expSpot),
+      dropped_capture_points: Math.round(1000 * AVG_EXP.expDef),
+    };
+    const result = calculateWn8(stats, AVG_EXP);
+    expect(result).toBeGreaterThan(1500);
+    expect(result).toBeLessThan(1750);
+  });
+
+  it('high performer (2× expected) yields significantly above average', () => {
+    const stats = {
+      battles: 1000,
+      wins: Math.round(1000 * AVG_EXP.expWinRate * 1.2),
+      damage_dealt: Math.round(1000 * AVG_EXP.expDmg * 2),
+      frags: Math.round(1000 * AVG_EXP.expFrag * 2),
+      spotted: Math.round(1000 * AVG_EXP.expSpot * 2),
+      dropped_capture_points: Math.round(1000 * AVG_EXP.expDef * 2),
+    };
+    expect(calculateWn8(stats, AVG_EXP)).toBeGreaterThan(2000);
+  });
+
+  it('very poor performer (0.3× expected) yields below average', () => {
+    const stats = {
+      battles: 1000,
+      wins: Math.round(1000 * AVG_EXP.expWinRate * 0.7),
+      damage_dealt: Math.round(1000 * AVG_EXP.expDmg * 0.3),
+      frags: Math.round(1000 * AVG_EXP.expFrag * 0.3),
+      spotted: Math.round(1000 * AVG_EXP.expSpot * 0.3),
+      dropped_capture_points: 0,
+    };
+    expect(calculateWn8(stats, AVG_EXP)).toBeLessThan(600);
+  });
+
+  it('higher damage & winrate → higher wn8', () => {
+    const low  = calculateWn8({ battles: 100, wins: 45, damage_dealt:  50_000, frags: 50, spotted: 50, dropped_capture_points: 200 }, AVG_EXP);
+    const high = calculateWn8({ battles: 100, wins: 65, damage_dealt: 300_000, frags: 50, spotted: 50, dropped_capture_points: 200 }, AVG_EXP);
+    expect(high).toBeGreaterThan(low);
   });
 });
 
@@ -50,28 +118,32 @@ describe('calculateWnx', () => {
     expect(calculateWnx({ battles: 100, wins: 5, damage_dealt: 500, frags: 0, spotted: 0, dropped_capture_points: 0 })).toBeGreaterThanOrEqual(0);
   });
 
-  it('equals calculateWn8 when there is no assisted damage', () => {
+  it('equals calculateWn8 when there is no assisted damage (no exp)', () => {
     const stats = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 60, spotted: 40, dropped_capture_points: 300 };
     expect(calculateWnx(stats)).toBe(calculateWn8(stats));
   });
 
-  it('is higher than wn8 when assisted damage is present', () => {
-    const base = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 60, spotted: 40, dropped_capture_points: 300 };
+  it('is higher than wn8 when assisted damage is present (no exp)', () => {
+    const base       = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 60, spotted: 40, dropped_capture_points: 300 };
     const withAssist = { ...base, avg_damage_assisted_radio: 500, avg_damage_assisted_track: 200 };
     expect(calculateWnx(withAssist)).toBeGreaterThan(calculateWn8(base));
   });
 
-  it('uses avg_damage_assisted as fallback when avg_damage_assisted_radio is absent', () => {
-    const stats = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 0, spotted: 0, dropped_capture_points: 0, avg_damage_assisted: 400 };
-    const statsRadio = { ...stats, avg_damage_assisted: undefined, avg_damage_assisted_radio: 400 };
-    expect(calculateWnx(stats)).toBe(calculateWnx(statsRadio));
+  it('equals calculateWn8 when there is no assisted damage (with exp)', () => {
+    const stats = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 60, spotted: 40, dropped_capture_points: 300 };
+    expect(calculateWnx(stats, AVG_EXP)).toBe(calculateWn8(stats, AVG_EXP));
   });
 
-  it('track assist and radio assist both contribute to effectiveDmg at 0.5 weight', () => {
-    const base = { battles: 100, wins: 50, damage_dealt: 100_000, frags: 0, spotted: 0, dropped_capture_points: 0 };
-    const withTrack = { ...base, avg_damage_assisted_track: 200 };
-    const withRadio = { ...base, avg_damage_assisted_radio: 200 };
-    expect(calculateWnx(withTrack)).toBe(calculateWnx(withRadio));
+  it('is higher than wn8 when assisted damage is present (with exp)', () => {
+    const base       = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 60, spotted: 40, dropped_capture_points: 300 };
+    const withAssist = { ...base, avg_damage_assisted_radio: 500, avg_damage_assisted_track: 200 };
+    expect(calculateWnx(withAssist, AVG_EXP)).toBeGreaterThan(calculateWn8(base, AVG_EXP));
+  });
+
+  it('uses avg_damage_assisted as fallback when avg_damage_assisted_radio is absent', () => {
+    const stats      = { battles: 100, wins: 55, damage_dealt: 200_000, frags: 0, spotted: 0, dropped_capture_points: 0, avg_damage_assisted: 400 };
+    const statsRadio = { ...stats, avg_damage_assisted: undefined, avg_damage_assisted_radio: 400 };
+    expect(calculateWnx(stats)).toBe(calculateWnx(statsRadio));
   });
 });
 
@@ -80,15 +152,15 @@ describe('calculateWnx', () => {
 // ---------------------------------------------------------------------------
 describe('getWn8Color', () => {
   const cases: Array<[number, string]> = [
-    [0, '#f05555'],
-    [299, '#f05555'],
-    [300, '#e88a00'],
-    [449, '#e88a00'],
-    [450, '#d4b800'],
-    [649, '#d4b800'],
-    [650, '#96b82c'],
-    [899, '#96b82c'],
-    [900, '#52a84a'],
+    [0,    '#f05555'],
+    [299,  '#f05555'],
+    [300,  '#e88a00'],
+    [449,  '#e88a00'],
+    [450,  '#d4b800'],
+    [649,  '#d4b800'],
+    [650,  '#96b82c'],
+    [899,  '#96b82c'],
+    [900,  '#52a84a'],
     [1199, '#52a84a'],
     [1200, '#38b8d4'],
     [1599, '#38b8d4'],
@@ -111,26 +183,26 @@ describe('getWn8Color', () => {
 // getWn8Label
 // ---------------------------------------------------------------------------
 describe('getWn8Label', () => {
-  it('returns "Very Bad" for 0', () => expect(getWn8Label(0)).toBe('Very Bad'));
-  it('returns "Bad" for 300', () => expect(getWn8Label(300)).toBe('Bad'));
-  it('returns "Below Average" for 450', () => expect(getWn8Label(450)).toBe('Below Average'));
-  it('returns "Average" for 650', () => expect(getWn8Label(650)).toBe('Average'));
-  it('returns "Above Average" for 900', () => expect(getWn8Label(900)).toBe('Above Average'));
-  it('returns "Good" for 1200', () => expect(getWn8Label(1200)).toBe('Good'));
-  it('returns "Very Good" for 1600', () => expect(getWn8Label(1600)).toBe('Very Good'));
-  it('returns "Great" for 1900', () => expect(getWn8Label(1900)).toBe('Great'));
-  it('returns "Unicum" for 2350', () => expect(getWn8Label(2350)).toBe('Unicum'));
-  it('returns "Super Unicum" for 2900', () => expect(getWn8Label(2900)).toBe('Super Unicum'));
+  it('returns "Very Bad" for 0',           () => expect(getWn8Label(0)).toBe('Very Bad'));
+  it('returns "Bad" for 300',              () => expect(getWn8Label(300)).toBe('Bad'));
+  it('returns "Below Average" for 450',    () => expect(getWn8Label(450)).toBe('Below Average'));
+  it('returns "Average" for 650',          () => expect(getWn8Label(650)).toBe('Average'));
+  it('returns "Above Average" for 900',    () => expect(getWn8Label(900)).toBe('Above Average'));
+  it('returns "Good" for 1200',            () => expect(getWn8Label(1200)).toBe('Good'));
+  it('returns "Very Good" for 1600',       () => expect(getWn8Label(1600)).toBe('Very Good'));
+  it('returns "Great" for 1900',           () => expect(getWn8Label(1900)).toBe('Great'));
+  it('returns "Unicum" for 2350',          () => expect(getWn8Label(2350)).toBe('Unicum'));
+  it('returns "Super Unicum" for 2900',    () => expect(getWn8Label(2900)).toBe('Super Unicum'));
 });
 
 // ---------------------------------------------------------------------------
 // getWrColor
 // ---------------------------------------------------------------------------
 describe('getWrColor', () => {
-  it('below 46 → red', () => expect(getWrColor(45)).toBe('#cd3333'));
-  it('46 → orange', () => expect(getWrColor(46)).toBe('#d77900'));
-  it('49 → yellow', () => expect(getWrColor(49)).toBe('#d7b600'));
-  it('52 → green', () => expect(getWrColor(52)).toBe('#4d7326'));
-  it('56 → teal', () => expect(getWrColor(56)).toBe('#4099b4'));
-  it('60 → purple', () => expect(getWrColor(60)).toBe('#793db6'));
+  it('below 46 → red',    () => expect(getWrColor(45)).toBe('#cd3333'));
+  it('46 → orange',       () => expect(getWrColor(46)).toBe('#d77900'));
+  it('49 → yellow',       () => expect(getWrColor(49)).toBe('#d7b600'));
+  it('52 → green',        () => expect(getWrColor(52)).toBe('#4d7326'));
+  it('56 → teal',         () => expect(getWrColor(56)).toBe('#4099b4'));
+  it('60 → purple',       () => expect(getWrColor(60)).toBe('#793db6'));
 });

@@ -13,6 +13,9 @@ export interface BattleRecord {
   playedAt: number;
   tankKey: string;
   tankName: string;
+  /** Pre-computed by the main process using proper WN8 formula + XVM expected values. */
+  wn8?: number;
+  wnx?: number;
   mapName: string;
   battleType: string;
   result: 'win' | 'loss' | 'draw';

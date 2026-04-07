@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { calculateWn8, calculateWnx, getWn8Color } from '../../shared/utils/wn8';
 
+// Fallback local calculation used only when main process hasn't enriched the battle
+// (e.g. WN8 expected values not yet fetched or this is the first scan)
+
 const PAGE_SIZE = 10;
 
 const battles = ref<BattleRecord[]>([]);
@@ -15,6 +18,7 @@ const newCount = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / PAGE_SIZE)));
 
 function battleWn8(b: BattleRecord): number {
+  if (b.wn8 !== undefined) return b.wn8;
   return calculateWn8({
     battles: 1,
     wins: b.result === 'win' ? 1 : 0,
@@ -26,6 +30,7 @@ function battleWn8(b: BattleRecord): number {
 }
 
 function battleWnx(b: BattleRecord): number {
+  if (b.wnx !== undefined) return b.wnx;
   return calculateWnx({
     battles: 1,
     wins: b.result === 'win' ? 1 : 0,
