@@ -50,6 +50,11 @@
   scrollbar-color: var(--line) transparent;
 }
 
+select option {
+  background-color: var(--card);
+  color: var(--fg);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;

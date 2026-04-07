@@ -79,16 +79,41 @@ const collapsed = computed(() => themeStore.sidebarCollapsed);
     <div
       :class="[
         'flex items-center border-b border-line shrink-0',
-        collapsed ? 'h-16 justify-center' : 'h-16 px-5',
+        collapsed ? 'h-16 justify-center' : 'h-16 px-3',
       ]"
     >
       <template v-if="!collapsed">
+        <svg width="36" height="24" viewBox="0 0 96 64" fill="none" class="shrink-0 mr-2.5">
+          <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35"/>
+          <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6"/>
+          <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b"/>
+          <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a"/>
+          <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b"/>
+          <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640"/>
+          <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3"/>
+          <ellipse cx="8"  cy="44" rx="10" ry="3" fill="#181a20"/>
+          <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20"/>
+          <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06"/>
+        </svg>
         <div class="flex flex-col">
           <span class="text-base font-bold text-gold tracking-wide leading-tight">Hulldown</span>
           <span class="text-[10px] text-faint leading-tight mt-0.5">World of Tanks Tracker</span>
         </div>
       </template>
-      <span v-else class="text-lg font-bold text-gold">H</span>
+      <template v-else>
+        <svg width="28" height="19" viewBox="0 0 96 64" fill="none" class="shrink-0">
+          <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35"/>
+          <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6"/>
+          <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b"/>
+          <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a"/>
+          <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b"/>
+          <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640"/>
+          <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3"/>
+          <ellipse cx="8"  cy="44" rx="10" ry="3" fill="#181a20"/>
+          <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20"/>
+          <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06"/>
+        </svg>
+      </template>
     </div>
 
     <!-- Navigation -->
