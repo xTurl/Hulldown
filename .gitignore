@@ -91,5 +91,8 @@ typings/
 # Electron-Forge
 out/
 
+# Vite build output
+dist/
+
 # Claude Code
 CLAUDE.md
