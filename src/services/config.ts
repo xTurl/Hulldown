@@ -16,7 +16,11 @@ function getConfigPath(): string {
 }
 
 function encrypt(value: string): string {
-  if (!value || !safeStorage.isEncryptionAvailable()) return value;
+  if (!value) return value;
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.error('[config] safeStorage encryption unavailable — API key will be stored as plaintext. Install a keyring (e.g. libsecret on Linux) to enable encryption.');
+    return value;
+  }
   return safeStorage.encryptString(value).toString('base64');
 }
 

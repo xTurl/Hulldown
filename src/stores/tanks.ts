@@ -22,6 +22,7 @@ export const useTanksStore = defineStore('tanks', () => {
   function reset() {
     tankList.value = [];
     error.value = null;
+    loading.value = false;
   }
 
   return { tankList, loading, error, fetchTankList, reset };

@@ -80,10 +80,15 @@ function getDb(): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_battles_account_played ON battles(account_id, played_at DESC);
     `);
     // Migrations — safe to run every startup
-    for (const col of ['wnx INTEGER NOT NULL DEFAULT 0', 'account_id INTEGER NOT NULL DEFAULT 0', ...RAW_COLUMNS]) {
-      try { db.exec(`ALTER TABLE progress_snapshots ADD COLUMN ${col}`); } catch { /* already exists */ }
+    const psColumns = (db.prepare('PRAGMA table_info(progress_snapshots)').all() as { name: string }[]).map(c => c.name);
+    for (const colDef of ['wnx INTEGER NOT NULL DEFAULT 0', 'account_id INTEGER NOT NULL DEFAULT 0', ...RAW_COLUMNS]) {
+      const colName = colDef.split(' ')[0];
+      if (!psColumns.includes(colName)) {
+        db.exec(`ALTER TABLE progress_snapshots ADD COLUMN ${colDef}`);
+      }
     }
-    for (const col of [
+    const battlesColumns = (db.prepare('PRAGMA table_info(battles)').all() as { name: string }[]).map(c => c.name);
+    for (const colDef of [
       'dropped_capture INTEGER NOT NULL DEFAULT 0',
       'damage_received INTEGER NOT NULL DEFAULT 0',
       'damage_blocked INTEGER NOT NULL DEFAULT 0',
@@ -94,7 +99,10 @@ function getDb(): Database.Database {
       'life_time INTEGER NOT NULL DEFAULT 0',
       "achievements TEXT NOT NULL DEFAULT '[]'",
     ]) {
-      try { db.exec(`ALTER TABLE battles ADD COLUMN ${col}`); } catch { /* already exists */ }
+      const colName = colDef.split(' ')[0];
+      if (!battlesColumns.includes(colName)) {
+        db.exec(`ALTER TABLE battles ADD COLUMN ${colDef}`);
+      }
     }
   }
   return db;

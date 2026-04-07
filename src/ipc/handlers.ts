@@ -241,7 +241,7 @@ export function registerHandlers(): void {
       ...buildTank(tankStat, encyclopedia[id]),
       mapStats: prevDetails?.mapStats ?? [],
       recommendations: prevDetails?.recommendations ?? null,
-      rawStats: tankStat.all as unknown as Record<string, number>,
+      rawStats: { ...tankStat.all } as Record<string, number>,
     };
 
     cacheService.saveTankDetails(id, details);
