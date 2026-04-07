@@ -2,8 +2,12 @@
 import { onMounted, ref } from 'vue';
 import { useConfigStore } from './stores/config';
 import { usePlayerStore } from './stores/player';
+import { useThemeStore } from './stores/theme';
 import Sidebar from './components/Sidebar.vue';
 import Setup from './views/Setup.vue';
+
+// Initialize theme as early as possible
+useThemeStore();
 
 const configStore = useConfigStore();
 const playerStore = usePlayerStore();
@@ -26,7 +30,7 @@ async function onSetupComplete() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
+  <div class="flex h-screen bg-surface text-fg overflow-hidden">
     <Setup v-if="needsSetup" @complete="onSetupComplete" />
     <template v-else>
       <Sidebar />

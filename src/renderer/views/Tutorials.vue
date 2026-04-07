@@ -63,17 +63,17 @@ const difficultyColor: Record<string, string> = {
 <template>
   <div class="p-6 max-w-4xl mx-auto w-full">
     <div class="mb-6">
-      <h2 class="text-2xl font-bold text-gray-100">Guides & Mechanics</h2>
-      <p class="text-sm text-gray-400 mt-0.5">Core game mechanics explained — click any card to expand</p>
+      <h2 class="text-2xl font-bold text-fg">Guides & Mechanics</h2>
+      <p class="text-sm text-muted mt-0.5">Core game mechanics explained — click any card to expand</p>
     </div>
 
     <!-- Recommended -->
     <div v-if="recommended.length > 0" class="mb-8">
       <div class="flex items-center gap-3 mb-3">
-        <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">Recommended for you</span>
-        <div class="flex-1 h-px bg-indigo-900/40"></div>
+        <span class="text-xs font-semibold uppercase tracking-wider text-gold">Recommended for you</span>
+        <div class="flex-1 h-px bg-gold-bg"></div>
       </div>
-      <p class="text-xs text-gray-500 mb-4">
+      <p class="text-xs text-faint mb-4">
         Based on your stats — these mechanics may address your weak points.
       </p>
       <div class="space-y-2">
@@ -90,17 +90,17 @@ const difficultyColor: Record<string, string> = {
     </div>
 
     <!-- No stats yet -->
-    <div v-else-if="!playerStore.playerInfo" class="mb-6 px-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-400">
+    <div v-else-if="!playerStore.playerInfo" class="mb-6 px-4 py-3 bg-card border border-line rounded-xl text-sm text-muted">
       Sync your stats on the Dashboard to get personalised recommendations.
     </div>
 
     <!-- All guides -->
     <div>
       <div class="flex items-center gap-3 mb-3">
-        <span class="text-xs font-semibold uppercase tracking-wider text-gray-500">
+        <span class="text-xs font-semibold uppercase tracking-wider text-faint">
           {{ recommended.length > 0 ? 'All guides' : 'Guides' }}
         </span>
-        <div class="flex-1 h-px bg-gray-800"></div>
+        <div class="flex-1 h-px bg-line"></div>
       </div>
       <div class="space-y-2">
         <TutorialCard

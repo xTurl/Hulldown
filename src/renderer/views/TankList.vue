@@ -69,8 +69,8 @@ onMounted(async () => {
   <div class="p-6 max-w-7xl mx-auto w-full">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h2 class="text-2xl font-bold text-gray-100">Tanks</h2>
-        <p class="text-sm text-gray-400 mt-0.5">
+        <h2 class="text-2xl font-bold text-fg">Tanks</h2>
+        <p class="text-sm text-muted mt-0.5">
           <template v-if="viewMode === 'focus'">
             {{ focusTanks.length }} tanks below your average
           </template>
@@ -82,27 +82,27 @@ onMounted(async () => {
       <button
         @click="tanksStore.fetchTankList()"
         :disabled="tanksStore.loading"
-        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-sm rounded-lg"
+        class="px-4 py-2 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
       >
         ↻ Refresh
       </button>
     </div>
 
     <!-- Mode toggle -->
-    <div class="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 mb-5 w-fit">
+    <div class="flex gap-1 bg-sub border border-line rounded-xl p-1 mb-5 w-fit">
       <button
         @click="viewMode = 'all'"
-        :class="['px-4 py-1.5 text-sm rounded-lg transition-colors', viewMode === 'all' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200']"
+        :class="['px-4 py-1.5 text-sm rounded-lg transition-colors', viewMode === 'all' ? 'bg-gold-bg text-gold' : 'text-muted hover:text-fg']"
       >
         All tanks
       </button>
       <button
         @click="viewMode = 'focus'"
-        :class="['px-4 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5', viewMode === 'focus' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200']"
+        :class="['px-4 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5', viewMode === 'focus' ? 'bg-gold-bg text-gold' : 'text-muted hover:text-fg']"
       >
         Needs improvement
         <span v-if="focusTanks.length" class="text-xs px-1.5 py-0.5 rounded-full"
-          :class="viewMode === 'focus' ? 'bg-indigo-500' : 'bg-gray-700 text-gray-300'">
+          :class="viewMode === 'focus' ? 'bg-gold text-surface' : 'bg-sub text-muted'">
           {{ focusTanks.length }}
         </span>
       </button>
@@ -113,17 +113,25 @@ onMounted(async () => {
       <input
         v-model="search"
         placeholder="Search tanks..."
-        class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-52"
+        class="bg-sub border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-faint focus:outline-none w-52"
+        @focus="(e) => (e.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
+        @blur="(e) => (e.target as HTMLInputElement).style.borderColor = ''"
       />
-      <select v-model="filterTier" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
+      <select v-model="filterTier" class="bg-sub border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none"
+        @focus="(e) => (e.target as HTMLSelectElement).style.borderColor = 'var(--gold)'"
+        @blur="(e) => (e.target as HTMLSelectElement).style.borderColor = ''">
         <option value="">All tiers</option>
         <option v-for="t in tiers" :key="t" :value="t">Tier {{ t }}</option>
       </select>
-      <select v-model="filterType" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
+      <select v-model="filterType" class="bg-sub border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none"
+        @focus="(e) => (e.target as HTMLSelectElement).style.borderColor = 'var(--gold)'"
+        @blur="(e) => (e.target as HTMLSelectElement).style.borderColor = ''">
         <option value="">All types</option>
         <option v-for="t in types" :key="t" :value="t">{{ typeLabels[t] }}</option>
       </select>
-      <select v-model="sortBy" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
+      <select v-model="sortBy" class="bg-sub border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none"
+        @focus="(e) => (e.target as HTMLSelectElement).style.borderColor = 'var(--gold)'"
+        @blur="(e) => (e.target as HTMLSelectElement).style.borderColor = ''">
         <option value="battles">Sort: Battles</option>
         <option value="winRate">Sort: WR%</option>
         <option value="wn8">Sort: WN8</option>
@@ -134,27 +142,27 @@ onMounted(async () => {
 
     <!-- Loading -->
     <div v-if="tanksStore.loading" class="space-y-2">
-      <div v-for="i in 10" :key="i" class="bg-gray-900 border border-gray-800 rounded-xl p-4 animate-pulse">
-        <div class="h-4 bg-gray-700 rounded w-1/3"></div>
+      <div v-for="i in 10" :key="i" class="bg-card border border-line rounded-xl p-4 animate-pulse">
+        <div class="h-4 bg-sub rounded w-1/3"></div>
       </div>
     </div>
 
     <!-- Focus / Needs improvement -->
     <template v-else-if="viewMode === 'focus'">
-      <div v-if="focusTanks.length === 0" class="text-center py-12 text-gray-400">
+      <div v-if="focusTanks.length === 0" class="text-center py-12 text-muted">
         <p>No tanks significantly below your average.</p>
-        <p class="text-sm text-gray-600 mt-1">Either your stats are consistent or you need more battles (min. 50 per tank).</p>
+        <p class="text-sm text-faint mt-1">Either your stats are consistent or you need more battles (min. 50 per tank).</p>
       </div>
       <div v-else>
-        <div class="mb-4 px-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-xs text-gray-500 flex gap-6">
-          <span>Your avg WR%: <span class="text-gray-300 font-medium">{{ playerAvgWr.toFixed(1) }}%</span></span>
-          <span>Your avg WN8: <span class="text-gray-300 font-medium">{{ Math.round(playerAvgWn8) }}</span></span>
-          <span class="text-gray-600">Showing tanks ≥50 battles that are &gt;3% WR or &gt;150 WN8 below your average</span>
+        <div class="mb-4 px-4 py-3 bg-card border border-line rounded-xl text-xs text-faint flex gap-6">
+          <span>Your avg WR%: <span class="text-muted font-medium">{{ playerAvgWr.toFixed(1) }}%</span></span>
+          <span>Your avg WN8: <span class="text-muted font-medium">{{ Math.round(playerAvgWn8) }}</span></span>
+          <span>Showing tanks ≥50 battles that are &gt;3% WR or &gt;150 WN8 below your average</span>
         </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div class="bg-card border border-line rounded-xl overflow-hidden">
           <table class="w-full">
             <thead>
-              <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+              <tr class="text-xs text-faint uppercase border-b border-line">
                 <th class="px-5 py-3 text-left">Tank</th>
                 <th class="px-4 py-3 text-right">Battles</th>
                 <th class="px-4 py-3 text-right">WR%</th>
@@ -167,18 +175,18 @@ onMounted(async () => {
                 v-for="(tank, i) in focusTanks"
                 :key="tank.tankId"
                 @click="router.push(`/tanks/${tank.tankId}`)"
-                :class="['border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors', i % 2 === 0 ? '' : 'bg-gray-800/20']"
+                :class="['border-t border-line hover:bg-sub cursor-pointer transition-colors', i % 2 === 0 ? '' : 'bg-sub/50']"
               >
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-2">
                     <div v-if="tank.isPremium" class="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0"></div>
                     <div>
-                      <div class="text-sm font-medium text-gray-100">{{ tank.name }}</div>
-                      <div class="text-xs text-gray-500">Tier {{ tank.tier }} • {{ typeLabels[tank.type] || tank.type }}</div>
+                      <div class="text-sm font-medium text-fg">{{ tank.name }}</div>
+                      <div class="text-xs text-faint">Tier {{ tank.tier }} • {{ typeLabels[tank.type] || tank.type }}</div>
                     </div>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-right text-sm text-gray-300">{{ tank.battles.toLocaleString('en-US') }}</td>
+                <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.battles.toLocaleString('en-US') }}</td>
                 <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(tank.winRate) }">
                   {{ tank.winRate.toFixed(1) }}%
                 </td>
@@ -200,13 +208,13 @@ onMounted(async () => {
 
     <!-- All tanks -->
     <template v-else>
-      <div v-if="filteredTanks.length === 0" class="text-center py-12 text-gray-400">
+      <div v-if="filteredTanks.length === 0" class="text-center py-12 text-muted">
         No tanks found. Click "Refresh" to fetch data.
       </div>
-      <div v-else class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div v-else class="bg-card border border-line rounded-xl overflow-hidden">
         <table class="w-full">
           <thead>
-            <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+            <tr class="text-xs text-faint uppercase border-b border-line">
               <th class="px-5 py-3 text-left">Tank</th>
               <th class="px-4 py-3 text-right">Battles</th>
               <th class="px-4 py-3 text-right">WR%</th>
@@ -221,26 +229,26 @@ onMounted(async () => {
               v-for="tank in filteredTanks"
               :key="tank.tankId"
               @click="router.push(`/tanks/${tank.tankId}`)"
-              class="border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors"
+              class="border-t border-line hover:bg-sub cursor-pointer transition-colors"
             >
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
                   <div v-if="tank.isPremium" class="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0"></div>
                   <div>
-                    <div class="text-sm font-medium text-gray-100">{{ tank.name }}</div>
-                    <div class="text-xs text-gray-500">Tier {{ tank.tier }} • {{ typeLabels[tank.type] || tank.type }} • {{ tank.nation }}</div>
+                    <div class="text-sm font-medium text-fg">{{ tank.name }}</div>
+                    <div class="text-xs text-faint">Tier {{ tank.tier }} • {{ typeLabels[tank.type] || tank.type }} • {{ tank.nation }}</div>
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-right text-sm text-gray-300">{{ tank.battles.toLocaleString('en-US') }}</td>
+              <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.battles.toLocaleString('en-US') }}</td>
               <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(tank.winRate) }">{{ tank.winRate.toFixed(1) }}%</td>
               <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wn8) }">{{ tank.wn8 }}</td>
               <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wnx) }">
                 {{ tank.wnx }}
-                <span v-if="tank.wnx > tank.wn8 + 20" class="text-xs text-indigo-400 ml-1">▲</span>
+                <span v-if="tank.wnx > tank.wn8 + 20" class="text-xs text-gold ml-1">▲</span>
               </td>
-              <td class="px-4 py-3 text-right text-sm text-gray-300">{{ tank.avgDamage.toLocaleString('en-US') }}</td>
-              <td class="px-4 py-3 text-right text-sm text-gray-400">{{ tank.survivalRate.toFixed(1) }}%</td>
+              <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.avgDamage.toLocaleString('en-US') }}</td>
+              <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.survivalRate.toFixed(1) }}%</td>
             </tr>
           </tbody>
         </table>

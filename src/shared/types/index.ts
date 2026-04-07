@@ -73,6 +73,8 @@ export interface Tank {
   winRate: number;
   wn8: number;
   wnx: number;
+  /** True when XVM expected values exist for this tank — WN8/WNX used real formula, not fallback approximation. */
+  hasExpectedValues: boolean;
   avgDamage: number;
   avgDamageAssisted: number;
   avgDamageAssistedTrack: number;

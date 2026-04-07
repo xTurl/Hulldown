@@ -79,7 +79,7 @@ function cellClass(row: StatRow, side: 'a' | 'b'): string {
   const otherVal = side === 'a' ? row.bRaw : row.aRaw;
   const diff = Math.abs(myVal - otherVal);
   const threshold = Math.max(Math.abs(myVal), Math.abs(otherVal)) * 0.01; // 1% tolerance
-  if (diff <= threshold) return 'text-gray-100';
+  if (diff <= threshold) return 'text-fg';
   const winning = row.higherIsBetter ? myVal > otherVal : myVal < otherVal;
   return winning ? 'text-green-400 font-semibold' : 'text-red-400';
 }
@@ -103,37 +103,37 @@ onMounted(async () => {
 
 <template>
   <div class="p-6 max-w-5xl mx-auto w-full">
-    <h2 class="text-2xl font-bold text-gray-100 mb-6">Compare Tanks</h2>
+    <h2 class="text-2xl font-bold text-fg mb-6">Compare Tanks</h2>
 
     <!-- Selectors -->
     <div class="grid grid-cols-2 gap-4 mb-6">
       <!-- Tank A -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1.5">Tank A</label>
+        <label class="block text-xs text-muted mb-1.5">Tank A</label>
         <div class="relative">
           <div class="flex gap-2">
             <input
               v-model="searchA"
-              @focus="showDropA = true"
-              @blur="setTimeout(() => showDropA = false, 150)"
+              @focus="showDropA = true; ($event.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
+              @blur="setTimeout(() => showDropA = false, 150); ($event.target as HTMLInputElement).style.borderColor = ''"
               placeholder="Search tank..."
-              class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              class="flex-1 bg-sub border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-faint focus:outline-none"
             />
-            <button v-if="tankA" @click="clearA" class="px-2 text-gray-500 hover:text-gray-300 text-lg leading-none">×</button>
+            <button v-if="tankA" @click="clearA" class="px-2 text-faint hover:text-muted text-lg leading-none">×</button>
           </div>
-          <div v-if="showDropA && filteredA.length" class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+          <div v-if="showDropA && filteredA.length" class="absolute z-10 w-full mt-1 bg-card border border-line rounded-lg shadow-xl overflow-hidden">
             <div
               v-for="t in filteredA"
               :key="t.tankId"
               @mousedown="selectA(t)"
-              class="px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 cursor-pointer flex items-center justify-between"
+              class="px-3 py-2 text-sm text-fg hover:bg-sub cursor-pointer flex items-center justify-between"
             >
               <span>{{ t.name }}</span>
-              <span class="text-xs text-gray-500">T{{ t.tier }} {{ typeLabels[t.type] || t.type }}</span>
+              <span class="text-xs text-faint">T{{ t.tier }} {{ typeLabels[t.type] || t.type }}</span>
             </div>
           </div>
         </div>
-        <div v-if="tankA" class="mt-2 px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg text-xs text-gray-400">
+        <div v-if="tankA" class="mt-2 px-3 py-2 bg-card border border-line rounded-lg text-xs text-muted">
           Tier {{ tankA.tier }} • {{ typeLabels[tankA.type] || tankA.type }} • {{ tankA.nation }}
           <span v-if="tankA.isPremium" class="ml-2 text-yellow-500">Premium</span>
         </div>
@@ -141,31 +141,31 @@ onMounted(async () => {
 
       <!-- Tank B -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1.5">Tank B</label>
+        <label class="block text-xs text-muted mb-1.5">Tank B</label>
         <div class="relative">
           <div class="flex gap-2">
             <input
               v-model="searchB"
-              @focus="showDropB = true"
-              @blur="setTimeout(() => showDropB = false, 150)"
+              @focus="showDropB = true; ($event.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
+              @blur="setTimeout(() => showDropB = false, 150); ($event.target as HTMLInputElement).style.borderColor = ''"
               placeholder="Search tank..."
-              class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              class="flex-1 bg-sub border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder-faint focus:outline-none"
             />
-            <button v-if="tankB" @click="clearB" class="px-2 text-gray-500 hover:text-gray-300 text-lg leading-none">×</button>
+            <button v-if="tankB" @click="clearB" class="px-2 text-faint hover:text-muted text-lg leading-none">×</button>
           </div>
-          <div v-if="showDropB && filteredB.length" class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+          <div v-if="showDropB && filteredB.length" class="absolute z-10 w-full mt-1 bg-card border border-line rounded-lg shadow-xl overflow-hidden">
             <div
               v-for="t in filteredB"
               :key="t.tankId"
               @mousedown="selectB(t)"
-              class="px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 cursor-pointer flex items-center justify-between"
+              class="px-3 py-2 text-sm text-fg hover:bg-sub cursor-pointer flex items-center justify-between"
             >
               <span>{{ t.name }}</span>
-              <span class="text-xs text-gray-500">T{{ t.tier }} {{ typeLabels[t.type] || t.type }}</span>
+              <span class="text-xs text-faint">T{{ t.tier }} {{ typeLabels[t.type] || t.type }}</span>
             </div>
           </div>
         </div>
-        <div v-if="tankB" class="mt-2 px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg text-xs text-gray-400">
+        <div v-if="tankB" class="mt-2 px-3 py-2 bg-card border border-line rounded-lg text-xs text-muted">
           Tier {{ tankB.tier }} • {{ typeLabels[tankB.type] || tankB.type }} • {{ tankB.nation }}
           <span v-if="tankB.isPremium" class="ml-2 text-yellow-500">Premium</span>
         </div>
@@ -173,34 +173,34 @@ onMounted(async () => {
     </div>
 
     <!-- Placeholder -->
-    <div v-if="!tankA || !tankB" class="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-      <p class="text-gray-400">Select two tanks to compare their stats side by side.</p>
+    <div v-if="!tankA || !tankB" class="bg-card border border-line rounded-xl p-12 text-center">
+      <p class="text-muted">Select two tanks to compare their stats side by side.</p>
     </div>
 
     <!-- Comparison table -->
     <template v-else>
       <!-- Score header -->
       <div class="grid grid-cols-3 gap-4 mb-4">
-        <div class="bg-gray-900 border rounded-xl p-4 text-center" :class="scoreA > scoreB ? 'border-green-700' : 'border-gray-800'">
-          <p class="text-xs text-gray-500 mb-1">{{ tankA.name }}</p>
+        <div class="bg-card border rounded-xl p-4 text-center" :class="scoreA > scoreB ? 'border-green-700' : 'border-line'">
+          <p class="text-xs text-faint mb-1">{{ tankA.name }}</p>
           <p class="text-2xl font-bold" :style="{ color: getWn8Color(tankA.wn8) }">{{ scoreA }}</p>
-          <p class="text-xs text-gray-500 mt-0.5">stats won</p>
+          <p class="text-xs text-faint mt-0.5">stats won</p>
         </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center flex items-center justify-center">
-          <span class="text-2xl text-gray-600">vs</span>
+        <div class="bg-card border border-line rounded-xl p-4 text-center flex items-center justify-center">
+          <span class="text-2xl text-faint">vs</span>
         </div>
-        <div class="bg-gray-900 border rounded-xl p-4 text-center" :class="scoreB > scoreA ? 'border-green-700' : 'border-gray-800'">
-          <p class="text-xs text-gray-500 mb-1">{{ tankB.name }}</p>
+        <div class="bg-card border rounded-xl p-4 text-center" :class="scoreB > scoreA ? 'border-green-700' : 'border-line'">
+          <p class="text-xs text-faint mb-1">{{ tankB.name }}</p>
           <p class="text-2xl font-bold" :style="{ color: getWn8Color(tankB.wn8) }">{{ scoreB }}</p>
-          <p class="text-xs text-gray-500 mt-0.5">stats won</p>
+          <p class="text-xs text-faint mt-0.5">stats won</p>
         </div>
       </div>
 
       <!-- Stats table -->
-      <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div class="bg-card border border-line rounded-xl overflow-hidden">
         <table class="w-full">
           <thead>
-            <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+            <tr class="text-xs text-faint uppercase border-b border-line">
               <th class="px-5 py-3 text-left">Stat</th>
               <th class="px-5 py-3 text-right">{{ tankA.name }}</th>
               <th class="px-5 py-3 text-right">{{ tankB.name }}</th>
@@ -210,16 +210,16 @@ onMounted(async () => {
             <tr
               v-for="(row, i) in statRows"
               :key="row.label"
-              :class="['border-t border-gray-800', i % 2 === 0 ? '' : 'bg-gray-800/20']"
+              :class="['border-t border-line', i % 2 === 0 ? '' : 'bg-sub/50']"
             >
-              <td class="px-5 py-3 text-sm text-gray-400">{{ row.label }}</td>
+              <td class="px-5 py-3 text-sm text-muted">{{ row.label }}</td>
               <td class="px-5 py-3 text-sm text-right" :class="cellClass(row, 'a')">{{ row.a }}</td>
               <td class="px-5 py-3 text-sm text-right" :class="cellClass(row, 'b')">{{ row.b }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="text-xs text-gray-600 mt-2 text-right">Green = better in that stat. Differences below 1% shown as neutral.</p>
+      <p class="text-xs text-faint mt-2 text-right">Green = better in that stat. Differences below 1% shown as neutral.</p>
     </template>
   </div>
 </template>

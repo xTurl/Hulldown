@@ -116,6 +116,7 @@ function buildTank(t: wgService.WgTankStat, vehicle: wgService.WgVehicle | undef
     winRate: battles > 0 ? Math.round((stats.wins / battles) * 1000) / 10 : 0,
     wn8: calculateWn8(stats, exp),
     wnx: calculateWnx(stats, exp),
+    hasExpectedValues: !!exp,
     avgDamage: battles > 0 ? Math.round(stats.damage_dealt / battles) : 0,
     avgDamageAssisted: Math.round(stats.avg_damage_assisted_radio ?? stats.avg_damage_assisted ?? 0),
     avgDamageAssistedTrack: Math.round(stats.avg_damage_assisted_track ?? 0),
@@ -142,6 +143,9 @@ function computeOverallWn8AndWnx(tankStats: wgService.WgTankStat[]): { wn8: numb
   for (const t of tankStats) {
     if (t.all.battles === 0) continue;
     const exp = expForTank(t.tank_id);
+    // When the XVM expected-values map is loaded, skip tanks that have no entry —
+    // this matches tomato.gg / noobmeter behaviour (fallback formula distorts the overall).
+    if (memWn8Exp && !exp) continue;
     totalWn8Weighted += calculateWn8(t.all, exp) * t.all.battles;
     totalWnxWeighted += calculateWnx(t.all, exp) * t.all.battles;
     totalBattles += t.all.battles;
@@ -323,6 +327,10 @@ export function registerHandlers(): void {
     const updated: TankDetails = { ...details, recommendations };
     cacheService.saveTankDetails(id, updated);
     return updated;
+  });
+
+  handle('cache:clearMem', () => {
+    clearMemCache();
   });
 
   handle('cache:clear', () => {

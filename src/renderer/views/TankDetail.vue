@@ -72,15 +72,15 @@ onMounted(loadTank);
 <template>
   <div class="p-6 max-w-5xl mx-auto w-full">
     <!-- Back button -->
-    <button @click="router.back()" class="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 mb-4 transition-colors">
+    <button @click="router.back()" class="flex items-center gap-1 text-sm text-muted hover:text-fg mb-4 transition-colors">
       ← Back
     </button>
 
     <!-- Loading -->
     <div v-if="loading" class="space-y-4">
-      <div class="h-8 bg-gray-800 rounded w-64 animate-pulse"></div>
+      <div class="h-8 bg-sub rounded w-64 animate-pulse"></div>
       <div class="grid grid-cols-4 gap-4">
-        <div v-for="i in 4" :key="i" class="bg-gray-900 border border-gray-800 rounded-xl p-4 animate-pulse h-20"></div>
+        <div v-for="i in 4" :key="i" class="bg-card border border-line rounded-xl p-4 animate-pulse h-20"></div>
       </div>
     </div>
 
@@ -90,12 +90,12 @@ onMounted(loadTank);
         <div>
           <div class="flex items-center gap-2 mb-1">
             <span v-if="tank.isPremium" class="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-400 rounded">Premium</span>
-            <span class="text-xs text-gray-400">Tier {{ tank.tier }} • {{ tank.type }} • {{ tank.nation }}</span>
+            <span class="text-xs text-muted">Tier {{ tank.tier }} • {{ tank.type }} • {{ tank.nation }}</span>
           </div>
-          <h2 class="text-2xl font-bold text-gray-100">{{ tank.name }}</h2>
-          <p class="text-sm text-gray-400 mt-0.5">{{ tank.battles.toLocaleString('en-US') }} battles</p>
+          <h2 class="text-2xl font-bold text-fg">{{ tank.name }}</h2>
+          <p class="text-sm text-muted mt-0.5">{{ tank.battles.toLocaleString('en-US') }} battles</p>
         </div>
-        <button @click="refresh" class="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg border border-gray-700">
+        <button @click="refresh" class="px-3 py-1.5 text-xs bg-sub hover:bg-card text-muted rounded-lg border border-line">
           ↻ Refresh
         </button>
       </div>
@@ -115,35 +115,35 @@ onMounted(loadTank);
 
       <!-- Assisted damage highlight -->
       <div v-if="tank.avgDamageAssisted > 0 || tank.avgDamageAssistedTrack > 0" class="grid grid-cols-3 gap-3 mb-6">
-        <div class="bg-gray-900 border border-indigo-900/50 rounded-xl p-3 text-center">
-          <p class="text-xs text-gray-400 mb-1">Avg Spotting (radio)</p>
-          <p class="text-lg font-bold text-indigo-300">{{ tank.avgDamageAssisted.toLocaleString('en-US') }}</p>
+        <div class="bg-card border border-line rounded-xl p-3 text-center">
+          <p class="text-xs text-muted mb-1">Avg Spotting (radio)</p>
+          <p class="text-lg font-bold text-gold">{{ tank.avgDamageAssisted.toLocaleString('en-US') }}</p>
         </div>
-        <div class="bg-gray-900 border border-indigo-900/50 rounded-xl p-3 text-center">
-          <p class="text-xs text-gray-400 mb-1">Avg Tracking</p>
-          <p class="text-lg font-bold text-indigo-300">{{ tank.avgDamageAssistedTrack.toLocaleString('en-US') }}</p>
+        <div class="bg-card border border-line rounded-xl p-3 text-center">
+          <p class="text-xs text-muted mb-1">Avg Tracking</p>
+          <p class="text-lg font-bold text-gold">{{ tank.avgDamageAssistedTrack.toLocaleString('en-US') }}</p>
         </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
-          <p class="text-xs text-gray-400 mb-1">Avg Blocked</p>
-          <p class="text-lg font-bold text-gray-300">{{ tank.avgDamageBlocked.toLocaleString('en-US') }}</p>
+        <div class="bg-card border border-line rounded-xl p-3 text-center">
+          <p class="text-xs text-muted mb-1">Avg Blocked</p>
+          <p class="text-lg font-bold text-muted">{{ tank.avgDamageBlocked.toLocaleString('en-US') }}</p>
         </div>
       </div>
       <div v-else class="mb-6"></div>
 
       <!-- Tabs -->
-      <div class="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 mb-4 w-fit">
+      <div class="flex gap-1 bg-sub border border-line rounded-xl p-1 mb-4 w-fit">
         <button
           v-for="tab in (['stats', 'maps', 'ai'] as const)"
           :key="tab"
           @click="activeTab = tab"
-          :class="['px-4 py-1.5 text-sm rounded-lg transition-colors', activeTab === tab ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200']"
+          :class="['px-4 py-1.5 text-sm rounded-lg transition-colors', activeTab === tab ? 'bg-gold-bg text-gold' : 'text-muted hover:text-fg']"
         >
           {{ tab === 'stats' ? 'Stats' : tab === 'maps' ? 'Maps' : 'AI Tips' }}
         </button>
       </div>
 
       <!-- Stats tab -->
-      <div v-if="activeTab === 'stats'" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div v-if="activeTab === 'stats'" class="bg-card border border-line rounded-xl overflow-hidden">
         <table class="w-full">
           <tbody>
             <tr v-for="(row, i) in [
@@ -160,9 +160,9 @@ onMounted(loadTank);
               ['Avg spots', tank.avgSpots.toFixed(2)],
               ['Survival rate', tank.survivalRate.toFixed(1) + '%'],
               ['Avg XP', tank.avgXp.toLocaleString('en-US')],
-            ]" :key="i" :class="[i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-800/30']">
-              <td class="px-5 py-3 text-sm text-gray-400">{{ row[0] }}</td>
-              <td class="px-5 py-3 text-sm font-medium text-gray-100 text-right">{{ row[1] }}</td>
+            ]" :key="i" :class="[i % 2 === 0 ? '' : 'bg-sub/50']">
+              <td class="px-5 py-3 text-sm text-muted">{{ row[0] }}</td>
+              <td class="px-5 py-3 text-sm font-medium text-fg text-right">{{ row[1] }}</td>
             </tr>
           </tbody>
         </table>
@@ -170,26 +170,26 @@ onMounted(loadTank);
 
       <!-- Maps tab -->
       <div v-else-if="activeTab === 'maps'">
-        <div v-if="sortedMaps.length === 0 && !fetchingMaps" class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-          <p class="text-gray-400 mb-2">No map data yet</p>
-          <p class="text-sm text-gray-500 mb-4">Map stats are built from your replay files (min. 2 battles per map).</p>
+        <div v-if="sortedMaps.length === 0 && !fetchingMaps" class="bg-card border border-line rounded-xl p-8 text-center">
+          <p class="text-muted mb-2">No map data yet</p>
+          <p class="text-sm text-faint mb-4">Map stats are built from your replay files (min. 2 battles per map).</p>
           <p v-if="mapsError" class="text-sm text-amber-400 mb-3">{{ mapsError }}</p>
           <button @click="fetchMaps" :disabled="fetchingMaps"
-            class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-sm rounded-lg transition-colors"
+            class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
           >
             {{ fetchingMaps ? 'Loading...' : '↓ Load from replays' }}
           </button>
         </div>
-        <div v-else class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div class="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
-            <span class="text-xs text-gray-500">{{ sortedMaps.length }} maps · from your replays</span>
+        <div v-else class="bg-card border border-line rounded-xl overflow-hidden">
+          <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+            <span class="text-xs text-faint">{{ sortedMaps.length }} maps · from your replays</span>
             <button @click="fetchMaps" :disabled="fetchingMaps"
-              class="text-xs text-indigo-400 hover:text-indigo-300 disabled:text-gray-600"
+              class="text-xs text-gold hover:text-gold-dim disabled:text-faint"
             >{{ fetchingMaps ? 'Refreshing...' : '↻ Refresh' }}</button>
           </div>
           <table class="w-full">
             <thead>
-              <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+              <tr class="text-xs text-faint uppercase border-b border-line">
                 <th class="px-5 py-3 text-left">Map</th>
                 <th class="px-4 py-3 text-right">Battles</th>
                 <th class="px-4 py-3 text-right">WR%</th>
@@ -198,11 +198,11 @@ onMounted(loadTank);
             </thead>
             <tbody>
               <tr v-for="(map, i) in sortedMaps" :key="map.mapName"
-                :class="['border-t border-gray-800', i % 2 === 0 ? '' : 'bg-gray-800/20']">
-                <td class="px-5 py-3 text-sm text-gray-100">{{ map.mapName }}</td>
-                <td class="px-4 py-3 text-right text-sm text-gray-300">{{ map.battles }}</td>
+                :class="['border-t border-line', i % 2 === 0 ? '' : 'bg-sub/50']">
+                <td class="px-5 py-3 text-sm text-fg">{{ map.mapName }}</td>
+                <td class="px-4 py-3 text-right text-sm text-muted">{{ map.battles }}</td>
                 <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(map.winRate) }">{{ map.winRate.toFixed(1) }}%</td>
-                <td class="px-4 py-3 text-right text-sm text-gray-300">{{ map.avgDamage.toLocaleString('en-US') }}</td>
+                <td class="px-4 py-3 text-right text-sm text-muted">{{ map.avgDamage.toLocaleString('en-US') }}</td>
               </tr>
             </tbody>
           </table>
@@ -212,13 +212,13 @@ onMounted(loadTank);
       <!-- AI tab -->
       <div v-else-if="activeTab === 'ai'">
         <div v-if="!tank.recommendations">
-          <div class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-            <p class="text-gray-300 mb-2">AI tips haven't been generated yet</p>
-            <p class="text-sm text-gray-500 mb-4">Click below to generate personalized tips for this tank (1 Claude API request).</p>
+          <div class="bg-card border border-line rounded-xl p-8 text-center">
+            <p class="text-muted mb-2">AI tips haven't been generated yet</p>
+            <p class="text-sm text-faint mb-4">Click below to generate personalized tips for this tank (1 Claude API request).</p>
             <button
               @click="generateAI"
               :disabled="generatingAI"
-              class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-sm rounded-lg transition-colors"
+              class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
             >
               {{ generatingAI ? 'Generating tips...' : '✨ Generate AI tips' }}
             </button>
@@ -226,47 +226,47 @@ onMounted(loadTank);
         </div>
         <div v-else class="space-y-4">
           <!-- Summary -->
-          <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h3 class="text-sm font-semibold text-gray-300 mb-2">Summary</h3>
-            <p class="text-sm text-gray-100 leading-relaxed">{{ tank.recommendations.summary }}</p>
+          <div class="bg-card border border-line rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-muted mb-2">Summary</h3>
+            <p class="text-sm text-fg leading-relaxed">{{ tank.recommendations.summary }}</p>
           </div>
           <!-- Strengths / Weaknesses -->
           <div class="grid grid-cols-2 gap-4">
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div class="bg-card border border-line rounded-xl p-5">
               <h3 class="text-sm font-semibold text-green-400 mb-3">✓ Strengths</h3>
               <ul class="space-y-1">
-                <li v-for="s in tank.recommendations.strengths" :key="s" class="text-sm text-gray-300 flex gap-2">
+                <li v-for="s in tank.recommendations.strengths" :key="s" class="text-sm text-muted flex gap-2">
                   <span class="text-green-500 flex-shrink-0">+</span>{{ s }}
                 </li>
               </ul>
             </div>
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div class="bg-card border border-line rounded-xl p-5">
               <h3 class="text-sm font-semibold text-red-400 mb-3">✗ Weaknesses</h3>
               <ul class="space-y-1">
-                <li v-for="w in tank.recommendations.weaknesses" :key="w" class="text-sm text-gray-300 flex gap-2">
+                <li v-for="w in tank.recommendations.weaknesses" :key="w" class="text-sm text-muted flex gap-2">
                   <span class="text-red-500 flex-shrink-0">−</span>{{ w }}
                 </li>
               </ul>
             </div>
           </div>
           <!-- Tips -->
-          <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h3 class="text-sm font-semibold text-indigo-400 mb-3">💡 Tips</h3>
+          <div class="bg-card border border-line rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-gold mb-3">💡 Tips</h3>
             <ol class="space-y-3">
-              <li v-for="(tip, i) in tank.recommendations.tips" :key="i" class="flex gap-3 text-sm text-gray-100">
-                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-900 text-indigo-300 text-xs flex items-center justify-center font-bold">{{ i + 1 }}</span>
+              <li v-for="(tip, i) in tank.recommendations.tips" :key="i" class="flex gap-3 text-sm text-fg">
+                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-gold-bg text-gold text-xs flex items-center justify-center font-bold">{{ i + 1 }}</span>
                 {{ tip }}
               </li>
             </ol>
           </div>
           <div class="flex items-center justify-between">
-            <p class="text-xs text-gray-600">
+            <p class="text-xs text-faint">
               Generated: {{ new Date(tank.recommendations.generatedAt).toLocaleString('en-US') }}
             </p>
             <button
               @click="generateAI(true)"
               :disabled="generatingAI"
-              class="text-xs text-gray-500 hover:text-indigo-400 disabled:opacity-40 transition-colors px-2 py-1 rounded hover:bg-gray-800"
+              class="text-xs text-faint hover:text-gold disabled:opacity-40 transition-colors px-2 py-1 rounded hover:bg-sub"
             >
               {{ generatingAI ? 'Regenerating...' : '↻ Regenerate with replay data' }}
             </button>
