@@ -190,6 +190,7 @@ describe('generateTankRecommendations', () => {
       battles: 45,
       winRate: 56,
       avgDamage: 2900,
+      avgAssist: 300,
       accuracy: 72,
       penRate: 85,
       avgDmgReceived: 1200,

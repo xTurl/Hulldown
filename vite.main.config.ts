@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
       'process.env.WG_API_KEY': JSON.stringify(env.WG_API_KEY || ''),
     },
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         external: ['better-sqlite3', 'electron'],
       },
     },

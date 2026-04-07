@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Tank, MapStat, AIRecommendations } from '../types';
 import type { ReplayTankContext } from './cache';
 
-interface TankWithAssisted extends Tank {
+interface TankWithAssisted extends Omit<Tank, 'avgDamageAssisted' | 'avgDamageAssistedTrack'> {
   avgDamageAssisted?: number;
   avgDamageAssistedTrack?: number;
 }
@@ -22,6 +22,7 @@ const MASTERY = ['none', '3rd class', '2nd class', '1st class', 'Ace Tanker'];
  */
 export function sanitizeForPrompt(value: string, maxLength = 200): string {
   return String(value)
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1F\x7F]/g, ' ') // control characters (incl. \n, \r) → space
     .replace(/\s+/g, ' ')
     .trim()
