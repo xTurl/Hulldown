@@ -65,37 +65,39 @@ async function finish() {
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-gray-950 flex items-center justify-center z-50">
-    <div class="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
+  <div class="fixed inset-0 bg-surface flex items-center justify-center z-50">
+    <div class="w-full max-w-md bg-card border border-line rounded-2xl p-8 shadow-2xl">
 
       <div class="flex justify-center mb-6">
         <img :src="iconUrl" class="w-16 h-16" alt="Hulldown" />
       </div>
 
-      <h1 class="text-2xl font-bold text-gray-100 text-center mb-1">Welcome to Hulldown</h1>
+      <h1 class="text-2xl font-bold text-fg text-center mb-1">Welcome to Hulldown</h1>
 
       <!-- Step indicators -->
       <div class="flex items-center justify-center gap-2 mb-8 mt-3">
         <div v-for="s in ['replays', 'confirm', 'keys']" :key="s"
-          :class="['w-2 h-2 rounded-full transition-colors', step === s ? 'bg-indigo-500' : 'bg-gray-700']"
+          :class="['w-2 h-2 rounded-full transition-colors', step === s ? 'bg-gold' : 'bg-faint']"
         />
       </div>
 
       <!-- Step 1: Replays directory -->
       <div v-if="step === 'replays'" class="space-y-4">
-        <p class="text-sm text-gray-400 text-center mb-6">
+        <p class="text-sm text-muted text-center mb-6">
           Point to your World of Tanks replays folder.<br>
           Your player info will be detected automatically.
         </p>
         <div>
-          <label class="block text-xs text-gray-400 mb-1">Replays directory</label>
+          <label class="block text-xs text-muted mb-1">Replays directory</label>
           <input
             v-model="replaysDir"
             @keyup.enter="detect"
             placeholder="/path/to/World of Tanks/eu/replays"
-            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 placeholder-gray-600 font-mono"
+            class="w-full bg-sub border border-line rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none placeholder-faint font-mono"
+            @focus="(e) => (e.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
+            @blur="(e) => (e.target as HTMLInputElement).style.borderColor = ''"
           />
-          <p class="text-xs text-gray-600 mt-1">
+          <p class="text-xs text-faint mt-1">
             Common paths: <span class="font-mono">~/.steam/.../World of Tanks/eu/replays</span>
           </p>
         </div>
@@ -107,7 +109,7 @@ async function finish() {
         <button
           @click="detect"
           :disabled="detecting || !replaysDir.trim()"
-          class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+          class="w-full py-3 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm font-semibold rounded-lg transition-opacity"
         >
           {{ detecting ? 'Detecting player...' : 'Detect from replays →' }}
         </button>
@@ -115,56 +117,58 @@ async function finish() {
 
       <!-- Step 2: Confirm detected player -->
       <div v-else-if="step === 'confirm'" class="space-y-4">
-        <p class="text-sm text-gray-400 text-center mb-2">Player detected from your replays:</p>
+        <p class="text-sm text-muted text-center mb-2">Player detected from your replays:</p>
 
-        <div class="bg-indigo-900/20 border border-indigo-700/50 rounded-xl px-5 py-4 text-center">
-          <p class="text-2xl font-bold text-gray-100 mb-1">{{ detectedName }}</p>
-          <p class="text-sm text-gray-400">Account ID: {{ detectedId }}</p>
-          <p class="text-sm text-gray-400 mt-1">Region: <span class="text-gray-200">{{ detectedRegion }}</span></p>
+        <div class="bg-gold-bg border border-gold/20 rounded-xl px-5 py-4 text-center">
+          <p class="text-2xl font-bold text-fg mb-1">{{ detectedName }}</p>
+          <p class="text-sm text-muted">Account ID: {{ detectedId }}</p>
+          <p class="text-sm text-muted mt-1">Region: <span class="text-fg">{{ detectedRegion }}</span></p>
         </div>
 
-        <p class="text-xs text-gray-500 text-center">
+        <p class="text-xs text-faint text-center">
           Wrong player? Check that you selected the correct replays folder.
         </p>
 
         <button
           @click="step = 'keys'"
-          class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-colors"
+          class="w-full py-3 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 text-sm font-semibold rounded-lg transition-opacity"
         >
           Looks good →
         </button>
-        <button @click="step = 'replays'" class="w-full py-2 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+        <button @click="step = 'replays'" class="w-full py-2 text-xs text-faint hover:text-muted transition-colors">
           ← Change directory
         </button>
       </div>
 
       <!-- Step 3: API keys -->
       <div v-else-if="step === 'keys'" class="space-y-4">
-        <p class="text-sm text-gray-400 text-center mb-2">
+        <p class="text-sm text-muted text-center mb-2">
           Optionally add your Claude API key for AI-powered tips per tank.<br>
-          <span class="text-gray-600">You can add it later in Settings.</span>
+          <span class="text-faint">You can add it later in Settings.</span>
         </p>
 
         <div>
-          <label class="block text-xs text-gray-400 mb-1">
+          <label class="block text-xs text-muted mb-1">
             Claude API Key
-            <span class="text-gray-600 ml-1">— AI tips per tank</span>
+            <span class="text-faint ml-1">— AI tips per tank</span>
           </label>
           <input v-model="claudeApiKey" type="password"
             placeholder="sk-ant-..."
-            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono placeholder-gray-600"
+            class="w-full bg-sub border border-line rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none font-mono placeholder-faint"
+            @focus="(e) => (e.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
+            @blur="(e) => (e.target as HTMLInputElement).style.borderColor = ''"
           />
-          <p class="text-xs text-gray-600 mt-1">Get yours at console.anthropic.com</p>
+          <p class="text-xs text-faint mt-1">Get yours at console.anthropic.com</p>
         </div>
 
         <button
           @click="finish"
           :disabled="saving"
-          class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors mt-2"
+          class="w-full py-3 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm font-semibold rounded-lg transition-opacity mt-2"
         >
           {{ saving ? 'Setting up...' : '✓ Get started' }}
         </button>
-        <button @click="step = 'confirm'" class="w-full py-2 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+        <button @click="step = 'confirm'" class="w-full py-2 text-xs text-faint hover:text-muted transition-colors">
           ← Back
         </button>
       </div>

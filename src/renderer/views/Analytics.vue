@@ -133,10 +133,10 @@ function sessionDuration(s: SessionSummary) {
 <template>
   <div class="flex-1 overflow-auto">
     <div class="max-w-5xl mx-auto px-6 py-6">
-      <h2 class="text-2xl font-bold text-gray-100 mb-6">Analytics</h2>
+      <h2 class="text-2xl font-bold text-fg mb-6">Analytics</h2>
 
       <!-- Tabs -->
-      <div class="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-xl p-1">
+      <div class="flex gap-1 mb-6 bg-sub border border-line rounded-xl p-1">
         <button
           v-for="{ id, label } in [
             { id: 'economy',  label: 'Economy'  },
@@ -149,8 +149,8 @@ function sessionDuration(s: SessionSummary) {
           :class="[
             'flex-1 py-2 text-sm font-medium rounded-lg transition-colors',
             activeTab === id
-              ? 'bg-indigo-600 text-white'
-              : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800',
+              ? 'bg-gold-bg text-gold'
+              : 'text-muted hover:text-fg hover:bg-sub',
           ]"
         >{{ label }}</button>
       </div>
@@ -159,47 +159,47 @@ function sessionDuration(s: SessionSummary) {
       <div v-if="activeTab === 'economy'">
         <!-- Period selector -->
         <div class="flex items-center gap-2 mb-5">
-          <span class="text-xs text-gray-500">Period:</span>
+          <span class="text-xs text-faint">Period:</span>
           <button v-for="d in [7, 14, 30, 90]" :key="d"
             @click="economyDays = d"
-            :class="['px-3 py-1 text-xs rounded-lg transition-colors', economyDays === d ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200']"
+            :class="['px-3 py-1 text-xs rounded-lg transition-colors', economyDays === d ? 'bg-gold-bg text-gold' : 'bg-sub text-muted hover:text-fg']"
           >{{ d }}d</button>
         </div>
 
-        <div v-if="economyLoading" class="py-16 text-center text-gray-500 animate-pulse">Loading...</div>
+        <div v-if="economyLoading" class="py-16 text-center text-faint animate-pulse">Loading...</div>
         <template v-else-if="economySummary">
           <!-- Summary cards -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p class="text-xs text-gray-500 mb-1">Net credits</p>
+            <div class="bg-card border border-line rounded-xl p-4">
+              <p class="text-xs text-faint mb-1">Net credits</p>
               <p class="text-xl font-bold" :style="{ color: creditsColor(economySummary.netCredits) }">
                 {{ formatCredits(economySummary.netCredits) }}
               </p>
             </div>
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p class="text-xs text-gray-500 mb-1">Per battle</p>
+            <div class="bg-card border border-line rounded-xl p-4">
+              <p class="text-xs text-faint mb-1">Per battle</p>
               <p class="text-xl font-bold" :style="{ color: creditsColor(economySummary.avgPerBattle) }">
                 {{ formatCredits(economySummary.avgPerBattle) }}
               </p>
             </div>
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p class="text-xs text-gray-500 mb-1">Repairs paid</p>
+            <div class="bg-card border border-line rounded-xl p-4">
+              <p class="text-xs text-faint mb-1">Repairs paid</p>
               <p class="text-xl font-bold text-red-400">-{{ economySummary.totalRepairs.toLocaleString('en-US') }}</p>
             </div>
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p class="text-xs text-gray-500 mb-1">Best day</p>
+            <div class="bg-card border border-line rounded-xl p-4">
+              <p class="text-xs text-faint mb-1">Best day</p>
               <p class="text-xl font-bold text-green-400">{{ formatCredits(economySummary.bestDay.netCredits) }}</p>
-              <p class="text-xs text-gray-600 mt-0.5">{{ economySummary.bestDay.day }}</p>
+              <p class="text-xs text-faint mt-0.5">{{ economySummary.bestDay.day }}</p>
             </div>
           </div>
 
           <!-- Per-day bars -->
-          <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h3 class="text-sm font-semibold text-gray-300 mb-4">Net credits by day</h3>
+          <div class="bg-card border border-line rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-muted mb-4">Net credits by day</h3>
             <div class="space-y-2">
               <div v-for="d in [...economyData].reverse()" :key="d.day" class="flex items-center gap-3">
-                <span class="text-xs text-gray-500 w-24 flex-shrink-0 text-right">{{ d.day }}</span>
-                <div class="flex-1 h-5 bg-gray-800 rounded overflow-hidden relative">
+                <span class="text-xs text-faint w-24 flex-shrink-0 text-right">{{ d.day }}</span>
+                <div class="flex-1 h-5 bg-sub rounded overflow-hidden relative">
                   <div
                     class="absolute top-0 bottom-0 rounded transition-all"
                     :style="{
@@ -212,71 +212,71 @@ function sessionDuration(s: SessionSummary) {
                 <span class="text-xs w-28 flex-shrink-0" :style="{ color: creditsColor(d.netCredits) }">
                   {{ formatCredits(d.netCredits) }}
                 </span>
-                <span class="text-xs text-gray-600 w-16 flex-shrink-0">{{ d.battles }}b {{ d.wins }}w</span>
+                <span class="text-xs text-faint w-16 flex-shrink-0">{{ d.battles }}b {{ d.wins }}w</span>
               </div>
             </div>
           </div>
         </template>
-        <div v-else class="py-16 text-center text-gray-500 text-sm">No economy data yet. Scan replays first.</div>
+        <div v-else class="py-16 text-center text-faint text-sm">No economy data yet. Scan replays first.</div>
       </div>
 
       <!-- ── MAPS ── -->
       <div v-if="activeTab === 'maps'">
-        <div v-if="mapLoading" class="py-16 text-center text-gray-500 animate-pulse">Loading...</div>
-        <div v-else-if="mapData.length" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div v-if="mapLoading" class="py-16 text-center text-faint animate-pulse">Loading...</div>
+        <div v-else-if="mapData.length" class="bg-card border border-line rounded-xl overflow-hidden">
           <!-- Sort controls -->
-          <div class="px-5 py-3 border-b border-gray-800 flex items-center gap-2">
-            <span class="text-xs text-gray-500">Sort by:</span>
+          <div class="px-5 py-3 border-b border-line flex items-center gap-2">
+            <span class="text-xs text-faint">Sort by:</span>
             <button v-for="{ key, label } in [{ key: 'battles', label: 'Battles' }, { key: 'winRate', label: 'Win rate' }, { key: 'avgDamage', label: 'Avg damage' }]"
               :key="key"
               @click="mapSort = key as typeof mapSort"
-              :class="['px-2.5 py-1 text-xs rounded-lg transition-colors', mapSort === key ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200']"
+              :class="['px-2.5 py-1 text-xs rounded-lg transition-colors', mapSort === key ? 'bg-gold-bg text-gold' : 'bg-sub text-muted hover:text-fg']"
             >{{ label }}</button>
           </div>
           <!-- Table header -->
-          <div class="grid grid-cols-6 gap-2 px-5 py-2 text-xs text-gray-600 border-b border-gray-800/50">
+          <div class="grid grid-cols-6 gap-2 px-5 py-2 text-xs text-faint border-b border-line">
             <span class="col-span-2">Map</span>
             <span class="text-right">Battles</span>
             <span class="text-right">Win rate</span>
             <span class="text-right">Avg damage</span>
             <span class="text-right">Avg frags</span>
           </div>
-          <div class="divide-y divide-gray-800/40">
+          <div class="divide-y divide-line">
             <div v-for="m in sortedMaps" :key="m.mapName"
-              class="grid grid-cols-6 gap-2 px-5 py-3 items-center hover:bg-gray-800/20 transition-colors"
+              class="grid grid-cols-6 gap-2 px-5 py-3 items-center hover:bg-sub transition-colors"
             >
-              <span class="col-span-2 text-sm font-medium text-gray-200">{{ m.mapName }}</span>
-              <span class="text-sm text-gray-300 text-right">{{ m.battles }}</span>
+              <span class="col-span-2 text-sm font-medium text-fg">{{ m.mapName }}</span>
+              <span class="text-sm text-muted text-right">{{ m.battles }}</span>
               <span class="text-sm font-semibold text-right" :style="{ color: wrColor(m.winRate) }">
                 {{ m.winRate.toFixed(1) }}%
               </span>
-              <span class="text-sm text-gray-300 text-right">{{ m.avgDamage.toLocaleString('en-US') }}</span>
-              <span class="text-sm text-gray-300 text-right">{{ m.avgKills.toFixed(2) }}</span>
+              <span class="text-sm text-muted text-right">{{ m.avgDamage.toLocaleString('en-US') }}</span>
+              <span class="text-sm text-muted text-right">{{ m.avgKills.toFixed(2) }}</span>
             </div>
           </div>
         </div>
-        <div v-else class="py-16 text-center text-gray-500 text-sm">No map data yet.</div>
+        <div v-else class="py-16 text-center text-faint text-sm">No map data yet.</div>
       </div>
 
       <!-- ── TANKS ── -->
       <div v-if="activeTab === 'tanks'">
         <div class="flex items-center gap-2 mb-5 flex-wrap">
-          <span class="text-xs text-gray-500">Period:</span>
+          <span class="text-xs text-faint">Period:</span>
           <button v-for="p in PERIODS" :key="p.ms"
             @click="tankPeriod = p.ms"
-            :class="['px-3 py-1 text-xs rounded-lg transition-colors', tankPeriod === p.ms ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200']"
+            :class="['px-3 py-1 text-xs rounded-lg transition-colors', tankPeriod === p.ms ? 'bg-gold-bg text-gold' : 'bg-sub text-muted hover:text-fg']"
           >{{ p.label }}</button>
-          <span class="ml-4 text-xs text-gray-500">Sort:</span>
+          <span class="ml-4 text-xs text-faint">Sort:</span>
           <button v-for="{ key, label } in [{ key: 'battles', label: 'Battles' }, { key: 'winRate', label: 'WR' }, { key: 'avgDamage', label: 'Damage' }, { key: 'netCredits', label: 'Credits' }]"
             :key="key"
             @click="tankSort = key as typeof tankSort"
-            :class="['px-2.5 py-1 text-xs rounded-lg transition-colors', tankSort === key ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200']"
+            :class="['px-2.5 py-1 text-xs rounded-lg transition-colors', tankSort === key ? 'bg-gold-bg text-gold' : 'bg-sub text-muted hover:text-fg']"
           >{{ label }}</button>
         </div>
 
-        <div v-if="tankLoading" class="py-16 text-center text-gray-500 animate-pulse">Loading...</div>
-        <div v-else-if="sortedTanks.length" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div class="grid grid-cols-8 gap-2 px-5 py-2 text-xs text-gray-600 border-b border-gray-800">
+        <div v-if="tankLoading" class="py-16 text-center text-faint animate-pulse">Loading...</div>
+        <div v-else-if="sortedTanks.length" class="bg-card border border-line rounded-xl overflow-hidden">
+          <div class="grid grid-cols-8 gap-2 px-5 py-2 text-xs text-faint border-b border-line">
             <span class="col-span-2">Tank</span>
             <span class="text-right">Battles</span>
             <span class="text-right">Win rate</span>
@@ -285,17 +285,17 @@ function sessionDuration(s: SessionSummary) {
             <span class="text-right">Net credits</span>
             <span class="text-right">Best</span>
           </div>
-          <div class="divide-y divide-gray-800/40">
+          <div class="divide-y divide-line">
             <div v-for="t in sortedTanks" :key="t.tankKey"
-              class="grid grid-cols-8 gap-2 px-5 py-3 items-center hover:bg-gray-800/20 transition-colors"
+              class="grid grid-cols-8 gap-2 px-5 py-3 items-center hover:bg-sub transition-colors"
             >
-              <span class="col-span-2 text-sm font-medium text-gray-200 truncate">{{ t.tankName }}</span>
-              <span class="text-sm text-gray-300 text-right">{{ t.battles }}</span>
+              <span class="col-span-2 text-sm font-medium text-fg truncate">{{ t.tankName }}</span>
+              <span class="text-sm text-muted text-right">{{ t.battles }}</span>
               <span class="text-sm font-semibold text-right" :style="{ color: wrColor(t.winRate) }">
                 {{ t.winRate.toFixed(1) }}%
               </span>
-              <span class="text-sm text-gray-300 text-right">{{ t.avgDamage.toLocaleString('en-US') }}</span>
-              <span class="text-sm text-gray-400 text-right">{{ t.avgAssist > 0 ? t.avgAssist.toLocaleString('en-US') : '—' }}</span>
+              <span class="text-sm text-muted text-right">{{ t.avgDamage.toLocaleString('en-US') }}</span>
+              <span class="text-sm text-muted text-right">{{ t.avgAssist > 0 ? t.avgAssist.toLocaleString('en-US') : '—' }}</span>
               <span class="text-sm font-medium text-right" :style="{ color: creditsColor(t.netCredits) }">
                 {{ formatCredits(t.netCredits) }}
               </span>
@@ -305,52 +305,52 @@ function sessionDuration(s: SessionSummary) {
             </div>
           </div>
         </div>
-        <div v-else class="py-16 text-center text-gray-500 text-sm">No tank data for this period.</div>
+        <div v-else class="py-16 text-center text-faint text-sm">No tank data for this period.</div>
       </div>
 
       <!-- ── SESSIONS ── -->
       <div v-if="activeTab === 'sessions'">
-        <div v-if="sessionLoading" class="py-16 text-center text-gray-500 animate-pulse">Loading...</div>
+        <div v-if="sessionLoading" class="py-16 text-center text-faint animate-pulse">Loading...</div>
         <div v-else-if="sessionData.length" class="space-y-3">
           <div v-for="s in sessionData" :key="s.sessionNum"
-            class="bg-gray-900 border border-gray-800 rounded-xl p-5"
+            class="bg-card border border-line rounded-xl p-5"
           >
             <div class="flex items-start justify-between gap-4 mb-4">
               <div>
-                <p class="text-sm font-semibold text-gray-100">{{ formatDate(s.startedAt) }}</p>
-                <p class="text-xs text-gray-500 mt-0.5">{{ sessionDuration(s) }} · {{ s.battles }} battles</p>
+                <p class="text-sm font-semibold text-fg">{{ formatDate(s.startedAt) }}</p>
+                <p class="text-xs text-faint mt-0.5">{{ sessionDuration(s) }} · {{ s.battles }} battles</p>
               </div>
               <div class="text-right">
                 <p class="text-sm font-bold" :style="{ color: creditsColor(s.netCredits) }">
                   {{ formatCredits(s.netCredits) }}
                 </p>
-                <p class="text-xs text-gray-600">net credits</p>
+                <p class="text-xs text-faint">net credits</p>
               </div>
             </div>
             <div class="grid grid-cols-4 gap-3">
-              <div class="bg-gray-800/50 rounded-lg px-3 py-2 text-center">
-                <p class="text-xs text-gray-500">Win rate</p>
+              <div class="bg-sub rounded-lg px-3 py-2 text-center">
+                <p class="text-xs text-faint">Win rate</p>
                 <p class="text-base font-bold mt-0.5" :style="{ color: wrColor(s.winRate) }">
                   {{ s.winRate.toFixed(1) }}%
                 </p>
-                <p class="text-xs text-gray-600">{{ s.wins }}W / {{ s.battles - s.wins }}L</p>
+                <p class="text-xs text-faint">{{ s.wins }}W / {{ s.battles - s.wins }}L</p>
               </div>
-              <div class="bg-gray-800/50 rounded-lg px-3 py-2 text-center">
-                <p class="text-xs text-gray-500">Avg damage</p>
-                <p class="text-base font-bold text-gray-100 mt-0.5">{{ s.avgDamage.toLocaleString('en-US') }}</p>
+              <div class="bg-sub rounded-lg px-3 py-2 text-center">
+                <p class="text-xs text-faint">Avg damage</p>
+                <p class="text-base font-bold text-fg mt-0.5">{{ s.avgDamage.toLocaleString('en-US') }}</p>
               </div>
-              <div class="bg-gray-800/50 rounded-lg px-3 py-2 text-center">
-                <p class="text-xs text-gray-500">Avg frags</p>
-                <p class="text-base font-bold text-gray-100 mt-0.5">{{ s.avgKills.toFixed(2) }}</p>
+              <div class="bg-sub rounded-lg px-3 py-2 text-center">
+                <p class="text-xs text-faint">Avg frags</p>
+                <p class="text-base font-bold text-fg mt-0.5">{{ s.avgKills.toFixed(2) }}</p>
               </div>
-              <div class="bg-gray-800/50 rounded-lg px-3 py-2 text-center">
-                <p class="text-xs text-gray-500">Ended</p>
-                <p class="text-xs font-medium text-gray-300 mt-1">{{ formatDate(s.endedAt) }}</p>
+              <div class="bg-sub rounded-lg px-3 py-2 text-center">
+                <p class="text-xs text-faint">Ended</p>
+                <p class="text-xs font-medium text-muted mt-1">{{ formatDate(s.endedAt) }}</p>
               </div>
             </div>
           </div>
         </div>
-        <div v-else class="py-16 text-center text-gray-500 text-sm">No session data yet.</div>
+        <div v-else class="py-16 text-center text-faint text-sm">No session data yet.</div>
       </div>
 
     </div>

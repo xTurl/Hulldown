@@ -15,35 +15,35 @@ defineEmits<{ toggle: [] }>();
   <div
     :class="[
       'border rounded-xl overflow-hidden transition-colors',
-      highlighted ? 'border-indigo-700/60 bg-indigo-950/30' : 'border-gray-800 bg-gray-900',
+      highlighted ? 'border-gold/30 bg-gold-bg' : 'border-line bg-card',
     ]"
   >
     <!-- Header -->
     <button
-      class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-gray-800/40 transition-colors"
+      class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-sub transition-colors"
       @click="$emit('toggle')"
     >
       <div class="min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-sm font-semibold text-gray-100">{{ tutorial.title }}</span>
+          <span class="text-sm font-semibold text-fg">{{ tutorial.title }}</span>
           <span :class="['text-xs px-2 py-0.5 rounded-full border font-medium', difficultyColor]">
             {{ tutorial.difficulty }}
           </span>
         </div>
-        <p class="text-xs text-gray-400 mt-0.5">{{ tutorial.subtitle }}</p>
+        <p class="text-xs text-muted mt-0.5">{{ tutorial.subtitle }}</p>
       </div>
       <span
-        class="text-gray-500 text-xl ml-4 flex-shrink-0 transition-transform duration-200"
+        class="text-faint text-xl ml-4 flex-shrink-0 transition-transform duration-200"
         :style="{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }"
       >›</span>
     </button>
 
     <!-- Body -->
-    <div v-if="isExpanded" class="px-5 pb-5 border-t border-gray-800/60">
+    <div v-if="isExpanded" class="px-5 pb-5 border-t border-line">
       <div class="space-y-4 mt-4">
         <div v-for="section in tutorial.sections" :key="section.heading">
-          <h4 class="text-sm font-semibold text-gray-200 mb-1">{{ section.heading }}</h4>
-          <p class="text-sm text-gray-400 leading-relaxed">{{ section.body }}</p>
+          <h4 class="text-sm font-semibold text-fg mb-1">{{ section.heading }}</h4>
+          <p class="text-sm text-muted leading-relaxed">{{ section.body }}</p>
         </div>
       </div>
 
@@ -52,7 +52,7 @@ defineEmits<{ toggle: [] }>();
         <span
           v-for="tag in tutorial.tags"
           :key="tag"
-          class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full"
+          class="text-xs text-faint bg-sub px-2 py-0.5 rounded-full"
         >{{ tag }}</span>
       </div>
 
@@ -62,7 +62,7 @@ defineEmits<{ toggle: [] }>();
           v-for="link in tutorial.links"
           :key="link.url"
           @click="window.api.openExternal(link.url)"
-          class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+          class="text-xs text-gold hover:text-gold-dim flex items-center gap-1 transition-colors"
         >
           ↗ {{ link.label }}
         </button>

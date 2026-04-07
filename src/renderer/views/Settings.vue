@@ -3,11 +3,14 @@ import { ref, onMounted } from 'vue';
 import { useConfigStore } from '../stores/config';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
+import { useThemeStore, type ThemeMode } from '../stores/theme';
 import type { AppConfig, CacheStats } from '../../shared/types';
 
 const configStore = useConfigStore();
 const playerStore = usePlayerStore();
 const tanksStore = useTanksStore();
+const themeStore = useThemeStore();
+
 const form = ref<AppConfig>({
   claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '',
 });
@@ -21,6 +24,12 @@ const battlesCleared = ref(false);
 const redetecting = ref(false);
 const redetectError = ref<string | null>(null);
 const redetectSuccess = ref(false);
+
+const themeOptions: { value: ThemeMode; label: string; icon: string }[] = [
+  { value: 'auto',  label: 'Auto',  icon: 'M12 3v1M12 20v1M4.22 4.22l.7.7M18.36 18.36l.7.7M3 12h1M20 12h1M4.92 19.08l.7-.7M18.36 5.64l.7-.7M12 7a5 5 0 100 10 5 5 0 000-10z' },
+  { value: 'dark',  label: 'Dark',  icon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z' },
+  { value: 'light', label: 'Light', icon: 'M12 3v1M12 20v1M4.22 4.22l.7.7M18.36 18.36l.7.7M3 12h1M20 12h1M4.92 19.08l.7-.7M18.36 5.64l.7-.7M12 7a5 5 0 100 10 5 5 0 000-10z' },
+];
 
 async function redetectPlayer() {
   redetecting.value = true;
@@ -97,59 +106,108 @@ onMounted(async () => {
 
 <template>
   <div class="p-6 max-w-2xl mx-auto w-full">
-    <h2 class="text-2xl font-bold text-gray-100 mb-6">Settings</h2>
+    <h2 class="text-2xl font-bold text-fg mb-6">Settings</h2>
 
-    <!-- Player section — read-only, populated from replays -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
+    <!-- Appearance -->
+    <div class="bg-card border border-line rounded-xl p-5 mb-4" style="box-shadow: 0 4px 20px rgba(0,0,0,0.2)">
+      <h3 class="text-sm font-semibold text-fg mb-4">Appearance</h3>
+      <div>
+        <label class="block text-xs text-muted mb-2">Theme</label>
+        <div class="flex gap-2">
+          <button
+            v-for="opt in themeOptions"
+            :key="opt.value"
+            @click="themeStore.setTheme(opt.value)"
+            :class="[
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm border transition-colors',
+              themeStore.theme === opt.value
+                ? 'border-gold text-gold bg-gold-bg'
+                : 'border-line text-muted hover:text-fg hover:bg-sub',
+            ]"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="w-4 h-4 shrink-0"
+            >
+              <path :d="opt.icon" />
+            </svg>
+            {{ opt.label }}
+          </button>
+        </div>
+        <p class="text-xs text-faint mt-2">
+          <template v-if="themeStore.theme === 'auto'">Follows your system preference automatically.</template>
+          <template v-else-if="themeStore.theme === 'dark'">Dark mode always on.</template>
+          <template v-else>Light mode always on.</template>
+        </p>
+      </div>
+    </div>
+
+    <!-- Player section -->
+    <div class="bg-card border border-line rounded-xl p-5 mb-4" style="box-shadow: 0 4px 20px rgba(0,0,0,0.2)">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-semibold text-gray-300">Player account</h3>
+        <h3 class="text-sm font-semibold text-fg">Player account</h3>
         <button
           @click="redetectPlayer"
           :disabled="redetecting || !form.replaysDir"
-          class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 border border-gray-600 rounded-lg transition-colors"
+          class="px-3 py-1.5 text-xs bg-sub hover:bg-card-hover disabled:opacity-50 text-muted border border-line rounded-lg transition-colors"
         >
           {{ redetecting ? 'Detecting...' : 'Re-detect from replays' }}
         </button>
       </div>
-      <div class="space-y-1 text-sm">
+      <div class="space-y-1.5 text-sm">
         <div class="flex items-center gap-3">
-          <span class="text-gray-500 w-24">Username</span>
-          <span class="text-gray-100 font-medium">{{ form.username || '—' }}</span>
+          <span class="text-faint w-24">Username</span>
+          <span class="text-fg font-medium">{{ form.username || '—' }}</span>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-gray-500 w-24">Account ID</span>
-          <span class="text-gray-400 font-mono text-xs">{{ form.accountId || '—' }}</span>
+          <span class="text-faint w-24">Account ID</span>
+          <span class="text-muted font-mono text-xs">{{ form.accountId || '—' }}</span>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-gray-500 w-24">Region</span>
-          <span class="text-gray-400">{{ form.region || '—' }}</span>
+          <span class="text-faint w-24">Region</span>
+          <span class="text-muted">{{ form.region || '—' }}</span>
         </div>
       </div>
       <p v-if="redetectError" class="text-xs text-red-400 mt-3">{{ redetectError }}</p>
       <p v-if="redetectSuccess" class="text-xs text-green-400 mt-3">✓ Player re-detected. Save settings to apply.</p>
     </div>
 
-    <!-- API Keys section -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
-      <h3 class="text-sm font-semibold text-gray-300 mb-4">API Keys</h3>
+    <!-- API Keys -->
+    <div class="bg-card border border-line rounded-xl p-5 mb-4" style="box-shadow: 0 4px 20px rgba(0,0,0,0.2)">
+      <h3 class="text-sm font-semibold text-fg mb-4">API Keys</h3>
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Claude API Key</label>
-        <input v-model="form.claudeApiKey" type="password" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono" />
-        <p class="text-xs text-gray-600 mt-1">Get yours at console.anthropic.com</p>
+        <label class="block text-xs text-muted mb-1.5">Claude API Key</label>
+        <input
+          v-model="form.claudeApiKey"
+          type="password"
+          class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none transition-colors"
+          style="background: var(--sub); border-color: var(--line); color: var(--fg);"
+          onfocus="this.style.borderColor='var(--gold)'"
+          onblur="this.style.borderColor='var(--line)'"
+        />
+        <p class="text-xs text-faint mt-1">Get yours at console.anthropic.com</p>
       </div>
     </div>
 
-    <!-- Replays section -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
-      <h3 class="text-sm font-semibold text-gray-300 mb-4">Replays</h3>
+    <!-- Replays -->
+    <div class="bg-card border border-line rounded-xl p-5 mb-4" style="box-shadow: 0 4px 20px rgba(0,0,0,0.2)">
+      <h3 class="text-sm font-semibold text-fg mb-4">Replays</h3>
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Replays directory</label>
+        <label class="block text-xs text-muted mb-1.5">Replays directory</label>
         <input
           v-model="form.replaysDir"
           placeholder="/home/user/.steam/.../World of Tanks/eu/replays"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 font-mono"
+          class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none transition-colors"
+          style="background: var(--sub); border-color: var(--line); color: var(--fg);"
+          onfocus="this.style.borderColor='var(--gold)'"
+          onblur="this.style.borderColor='var(--line)'"
         />
-        <p class="text-xs text-gray-600 mt-1">Path to the folder where WoT saves replay files (.wotreplay)</p>
+        <p class="text-xs text-faint mt-1">Path to the folder where WoT saves replay files (.wotreplay)</p>
       </div>
     </div>
 
@@ -157,56 +215,46 @@ onMounted(async () => {
     <button
       @click="save"
       :disabled="saving"
-      class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors mb-3"
+      class="w-full py-2.5 text-sm font-medium rounded-lg transition-colors mb-3 disabled:opacity-50"
+      style="background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold)55"
     >
       {{ saving ? 'Saving...' : 'Save settings' }}
     </button>
 
-    <!-- Success banner -->
-    <div
-      v-if="saved"
-      class="flex items-center gap-2 px-4 py-3 mb-4 bg-green-900/40 border border-green-700 rounded-lg text-green-300 text-sm"
-    >
-      <span class="text-green-400 font-bold">✓</span>
-      Settings saved.
+    <!-- Feedback banners -->
+    <div v-if="saved" class="flex items-center gap-2 px-4 py-3 mb-4 bg-green-900/30 border border-green-700/50 rounded-lg text-green-400 text-sm">
+      <span class="font-bold">✓</span> Settings saved.
     </div>
-
-    <!-- Error banner -->
-    <div
-      v-else-if="saveError"
-      class="flex items-center gap-2 px-4 py-3 mb-4 bg-red-900/40 border border-red-700 rounded-lg text-red-300 text-sm"
-    >
-      <span class="text-red-400 font-bold">✕</span>
-      {{ saveError }}
+    <div v-else-if="saveError" class="flex items-center gap-2 px-4 py-3 mb-4 bg-red-900/30 border border-red-700/50 rounded-lg text-red-400 text-sm">
+      <span class="font-bold">✕</span> {{ saveError }}
     </div>
+    <div v-else class="mb-4" />
 
-    <div v-else class="mb-4"></div>
-
-    <!-- Cache section -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-      <h3 class="text-sm font-semibold text-gray-300 mb-3">Cache</h3>
+    <!-- Cache -->
+    <div class="bg-card border border-line rounded-xl p-5" style="box-shadow: 0 4px 20px rgba(0,0,0,0.2)">
+      <h3 class="text-sm font-semibold text-fg mb-3">Cache</h3>
       <div class="flex items-center justify-between mb-3">
         <div>
-          <p class="text-sm text-gray-400">Tanks cached: <span class="text-gray-100">{{ cacheStats.tanks }}</span></p>
-          <p class="text-xs text-gray-500 mt-0.5">Last sync: {{ cacheStats.lastSync || 'never' }}</p>
+          <p class="text-sm text-muted">Tanks cached: <span class="text-fg">{{ cacheStats.tanks }}</span></p>
+          <p class="text-xs text-faint mt-0.5">Last sync: {{ cacheStats.lastSync || 'never' }}</p>
         </div>
         <button
           @click="clearCache"
           :disabled="clearing"
-          class="px-3 py-1.5 text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-800 rounded-lg transition-colors"
+          class="px-3 py-1.5 text-xs bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-800/50 rounded-lg transition-colors"
         >
           {{ clearing ? 'Clearing...' : 'Clear cache' }}
         </button>
       </div>
-      <div class="border-t border-gray-800 pt-3 flex items-center justify-between">
+      <div class="border-t border-line pt-3 flex items-center justify-between">
         <div>
-          <p class="text-sm text-gray-400">Replay database</p>
-          <p class="text-xs text-gray-600 mt-0.5">Delete all parsed battles and re-import from replay files</p>
+          <p class="text-sm text-muted">Replay database</p>
+          <p class="text-xs text-faint mt-0.5">Delete all parsed battles and re-import from replay files</p>
         </div>
         <button
           @click="clearAndRescanBattles"
           :disabled="clearingBattles"
-          class="px-3 py-1.5 text-xs bg-amber-900/30 hover:bg-amber-900/50 text-amber-400 border border-amber-800 rounded-lg transition-colors whitespace-nowrap"
+          class="px-3 py-1.5 text-xs bg-amber-900/20 hover:bg-amber-900/40 text-amber-400 border border-amber-800/50 rounded-lg transition-colors whitespace-nowrap"
         >
           {{ clearingBattles ? 'Rescanning...' : 'Reset & rescan' }}
         </button>
