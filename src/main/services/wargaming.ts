@@ -54,6 +54,7 @@ export interface WgTankStat {
 export interface WgVehicle {
   tank_id: number;
   name: string;
+  tag: string;
   tier: number;
   type: string;
   nation: string;
@@ -127,7 +128,7 @@ export async function getVehicleEncyclopedia(apiKey: string, region: string, tan
   const base = getBaseUrl(region);
   const params: Record<string, unknown> = {
     application_id: apiKey,
-    fields: 'tank_id,name,tier,type,nation,is_premium',
+    fields: 'tank_id,name,tag,tier,type,nation,is_premium',
     language: 'en',
   };
   if (tankIds && tankIds.length > 0) {

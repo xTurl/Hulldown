@@ -24,12 +24,24 @@ const WN8_EXP_TTL = 24 * ONE_HOUR;
 
 // name → tankId reverse lookup built from encyclopedia
 let memNameToTankId: Map<string, number> | null = null;
+// vehicle tag → tankId lookup (more reliable than name matching for replay enrichment)
+let memTagToTankId: Map<string, number> | null = null;
+
+/**
+ * Extracts the WG vehicle tag from a replay playerVehicle key.
+ * "uk-GB123_GSOR_1006_v7"  → "GB123_GSOR_1006_v7"
+ * "sweden:S10_Strv_107_12" → "S10_Strv_107_12"
+ */
+function extractVehicleTag(tankKey: string): string {
+  return tankKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '');
+}
 
 function clearMemCache() {
   memTankStats = null;
   memEncyclopedia = null;
   memFetchedAt = 0;
   memNameToTankId = null;
+  memTagToTankId = null;
 }
 
 /** Wraps an IPC handler so all errors are caught and logged before re-throwing. */
@@ -66,8 +78,9 @@ async function getWgData(config: ReturnType<typeof configService.getConfig>) {
   memTankStats = tankStats;
   memEncyclopedia = encyclopedia;
   memFetchedAt = Date.now();
-  // Build name → tankId reverse mapping for battle enrichment
+  // Build reverse lookups for battle enrichment
   memNameToTankId = new Map(Object.values(encyclopedia).map(v => [v.name, v.tank_id]));
+  memTagToTankId  = new Map(Object.values(encyclopedia).map(v => [v.tag,  v.tank_id]));
   return { tankStats, encyclopedia };
 }
 
@@ -376,7 +389,9 @@ export function registerHandlers(): void {
     await Promise.all([getWn8Exp(), getWgData(config)]);
 
     return battles.map(b => {
-      const tankId = memNameToTankId?.get(b.tankName);
+      // Prefer tag-based lookup (exact match to WG internal vehicle tag) over name matching
+      const tankId = memTagToTankId?.get(extractVehicleTag(b.tankKey))
+        ?? memNameToTankId?.get(b.tankName);
       const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
       const single = {
         battles: 1,
