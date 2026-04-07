@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     build: {
       rolldownOptions: {
         external: ['better-sqlite3', 'electron'],
+        output: { entryFileNames: 'main.js' },
       },
     },
   };

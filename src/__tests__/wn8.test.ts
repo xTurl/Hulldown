@@ -5,7 +5,7 @@ import {
   getWn8Color,
   getWn8Label,
   getWrColor,
-} from '../utils/wn8';
+} from '../shared/utils/wn8';
 
 // ---------------------------------------------------------------------------
 // calculateWn8
