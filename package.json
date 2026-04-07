@@ -12,7 +12,11 @@
     "publish": "electron-forge publish",
     "lint": "eslint src",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "release-it",
+    "release:patch": "release-it patch",
+    "release:minor": "release-it minor",
+    "release:major": "release-it major"
   },
   "keywords": [],
   "author": "Krzysztof Baranowski",
@@ -39,6 +43,7 @@
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
     "globals": "^17.4.0",
+    "release-it": "^19.2.4",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.0",
