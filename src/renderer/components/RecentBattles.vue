@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { calculateWn8, calculateWnx, getWn8Color } from '../../shared/utils/wn8';
 
+// Fallback local calculation used only when main process hasn't enriched the battle
+// (e.g. WN8 expected values not yet fetched or this is the first scan)
+
 const PAGE_SIZE = 10;
 
 const battles = ref<BattleRecord[]>([]);
@@ -14,27 +17,12 @@ const newCount = ref(0);
 
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / PAGE_SIZE)));
 
-function battleWn8(b: BattleRecord): number {
-  return calculateWn8({
-    battles: 1,
-    wins: b.result === 'win' ? 1 : 0,
-    damage_dealt: b.damage,
-    frags: b.kills,
-    spotted: b.spotted,
-    dropped_capture_points: b.droppedCapture,
-  });
+function battleWn8(b: BattleRecord): number | undefined {
+  return b.wn8;
 }
 
-function battleWnx(b: BattleRecord): number {
-  return calculateWnx({
-    battles: 1,
-    wins: b.result === 'win' ? 1 : 0,
-    damage_dealt: b.damage,
-    frags: b.kills,
-    spotted: b.spotted,
-    dropped_capture_points: b.droppedCapture,
-    avg_damage_assisted_radio: b.assist,
-  });
+function battleWnx(b: BattleRecord): number | undefined {
+  return b.wnx;
 }
 
 async function loadPage(p: number) {
@@ -182,16 +170,16 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
             <!-- WN8 -->
             <div class="text-center bg-gray-800/60 rounded-lg px-3 py-2 min-w-[56px]">
               <p class="text-xs text-gray-500 mb-0.5">WN8</p>
-              <p class="text-sm font-bold" :style="{ color: getWn8Color(battleWn8(b)) }">
-                {{ battleWn8(b) || '—' }}
+              <p class="text-sm font-bold" :style="{ color: getWn8Color(battleWn8(b) ?? 0) }">
+                {{ battleWn8(b) !== undefined ? battleWn8(b) : '—' }}
               </p>
             </div>
 
             <!-- WNX -->
             <div class="text-center bg-gray-800/60 rounded-lg px-3 py-2 min-w-[56px]">
               <p class="text-xs text-gray-500 mb-0.5">WNX</p>
-              <p class="text-sm font-bold" :style="{ color: getWn8Color(battleWnx(b)) }">
-                {{ battleWnx(b) || '—' }}
+              <p class="text-sm font-bold" :style="{ color: getWn8Color(battleWnx(b) ?? 0) }">
+                {{ battleWnx(b) !== undefined ? battleWnx(b) : '—' }}
               </p>
             </div>
 

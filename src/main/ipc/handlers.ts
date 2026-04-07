@@ -17,10 +17,31 @@ let memTankStats: wgService.WgTankStat[] | null = null;
 let memEncyclopedia: Record<number, wgService.WgVehicle> | null = null;
 let memFetchedAt = 0;
 
+// WN8 expected values cache (XVM) — 24 h TTL, best-effort (null = unavailable)
+let memWn8Exp: Map<number, wgService.Wn8ExpEntry> | null = null;
+let memWn8ExpFetchedAt = 0;
+const WN8_EXP_TTL = 24 * ONE_HOUR;
+
+// name → tankId reverse lookup built from encyclopedia
+let memNameToTankId: Map<string, number> | null = null;
+// vehicle tag → tankId lookup (more reliable than name matching for replay enrichment)
+let memTagToTankId: Map<string, number> | null = null;
+
+/**
+ * Extracts the WG vehicle tag from a replay playerVehicle key.
+ * "uk-GB123_GSOR_1006_v7"  → "GB123_GSOR_1006_v7"
+ * "sweden:S10_Strv_107_12" → "S10_Strv_107_12"
+ */
+function extractVehicleTag(tankKey: string): string {
+  return tankKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '');
+}
+
 function clearMemCache() {
   memTankStats = null;
   memEncyclopedia = null;
   memFetchedAt = 0;
+  memNameToTankId = null;
+  memTagToTankId = null;
 }
 
 /** Wraps an IPC handler so all errors are caught and logged before re-throwing. */
@@ -57,12 +78,32 @@ async function getWgData(config: ReturnType<typeof configService.getConfig>) {
   memTankStats = tankStats;
   memEncyclopedia = encyclopedia;
   memFetchedAt = Date.now();
+  // Build reverse lookups for battle enrichment
+  memNameToTankId = new Map(Object.values(encyclopedia).map(v => [v.name, v.tank_id]));
+  memTagToTankId  = new Map(Object.values(encyclopedia).map(v => [v.tag,  v.tank_id]));
   return { tankStats, encyclopedia };
+}
+
+async function getWn8Exp(): Promise<Map<number, wgService.Wn8ExpEntry> | null> {
+  if (memWn8Exp && Date.now() - memWn8ExpFetchedAt < WN8_EXP_TTL) return memWn8Exp;
+  try {
+    memWn8Exp = await wgService.getWn8ExpectedValues();
+    memWn8ExpFetchedAt = Date.now();
+  } catch (e) {
+    console.warn('[WN8] Failed to fetch expected values, falling back to approximation:', e instanceof Error ? e.message : e);
+    memWn8Exp = null;
+  }
+  return memWn8Exp;
+}
+
+function expForTank(tankId: number): import('../../shared/utils/wn8').Wn8Expected | undefined {
+  return memWn8Exp?.get(tankId);
 }
 
 function buildTank(t: wgService.WgTankStat, vehicle: wgService.WgVehicle | undefined): Tank {
   const stats = t.all;
   const battles = stats.battles;
+  const exp = expForTank(t.tank_id);
   return {
     tankId: t.tank_id,
     name: vehicle?.name || `Tank #${t.tank_id}`,
@@ -73,8 +114,8 @@ function buildTank(t: wgService.WgTankStat, vehicle: wgService.WgVehicle | undef
     battles,
     wins: stats.wins,
     winRate: battles > 0 ? Math.round((stats.wins / battles) * 1000) / 10 : 0,
-    wn8: calculateWn8(stats),
-    wnx: calculateWnx(stats),
+    wn8: calculateWn8(stats, exp),
+    wnx: calculateWnx(stats, exp),
     avgDamage: battles > 0 ? Math.round(stats.damage_dealt / battles) : 0,
     avgDamageAssisted: Math.round(stats.avg_damage_assisted_radio ?? stats.avg_damage_assisted ?? 0),
     avgDamageAssistedTrack: Math.round(stats.avg_damage_assisted_track ?? 0),
@@ -94,16 +135,22 @@ const CLASS_LABELS: Record<string, string> = {
   SPG: 'Artillery',
 };
 
-function computeOverallWnx(tankStats: wgService.WgTankStat[]): number {
+function computeOverallWn8AndWnx(tankStats: wgService.WgTankStat[]): { wn8: number; wnx: number } {
   let totalBattles = 0;
+  let totalWn8Weighted = 0;
   let totalWnxWeighted = 0;
   for (const t of tankStats) {
     if (t.all.battles === 0) continue;
-    const wnx = calculateWnx(t.all);
-    totalWnxWeighted += wnx * t.all.battles;
+    const exp = expForTank(t.tank_id);
+    totalWn8Weighted += calculateWn8(t.all, exp) * t.all.battles;
+    totalWnxWeighted += calculateWnx(t.all, exp) * t.all.battles;
     totalBattles += t.all.battles;
   }
-  return totalBattles > 0 ? Math.round(totalWnxWeighted / totalBattles) : 0;
+  if (totalBattles === 0) return { wn8: 0, wnx: 0 };
+  return {
+    wn8: Math.round(totalWn8Weighted / totalBattles),
+    wnx: Math.round(totalWnxWeighted / totalBattles),
+  };
 }
 
 function buildPlayerContext(
@@ -181,7 +228,9 @@ export function registerHandlers(): void {
     const config = configService.getConfig();
     const playerInfo = await wgService.getPlayerInfo(config.accountId, WG_API_KEY, config.region);
     const stats = playerInfo.statistics.all;
-    const wn8 = calculateWn8(stats);
+    // Use per-tank weighted average WN8 when tank stats are available (most accurate)
+    const overall = memTankStats ? computeOverallWn8AndWnx(memTankStats) : { wn8: calculateWn8(stats), wnx: 0 };
+    const wn8 = overall.wn8;
     const result = {
       accountId: playerInfo.account_id,
       username: playerInfo.nickname,
@@ -199,7 +248,7 @@ export function registerHandlers(): void {
         takenAt: Date.now(),
         battles: stats.battles,
         wn8,
-        wnx: memTankStats ? computeOverallWnx(memTankStats) : 0,
+        wnx: overall.wnx,
         winRate: stats.battles > 0 ? Math.round((stats.wins / stats.battles) * 1000) / 10 : 0,
         rawWins: stats.wins,
         rawDamage: stats.damage_dealt,
@@ -216,9 +265,12 @@ export function registerHandlers(): void {
 
   handle('tanks:list', async () => {
     const config = configService.getConfig();
-    const { tankStats, encyclopedia } = await getWgData(config);
+    const [{ tankStats, encyclopedia }] = await Promise.all([
+      getWgData(config),
+      getWn8Exp(),  // pre-warm expected values cache in parallel
+    ]);
 
-    cacheService.backfillMissingWnx(computeOverallWnx(tankStats));
+    cacheService.backfillMissingWnx(computeOverallWn8AndWnx(tankStats).wnx);
 
     return tankStats
       .filter(t => t.all.battles > 0)
@@ -325,13 +377,39 @@ export function registerHandlers(): void {
     );
   });
 
-  handle('replays:list', (limit, offset) => {
+  handle('replays:list', async (limit, offset) => {
     const config = configService.getConfig();
-    return cacheService.getBattles(
+    const battles = cacheService.getBattles(
       config.accountId,
       assertOptionalNumber(limit, 'limit', 10),
       assertOptionalNumber(offset, 'offset', 0),
     );
+    // Ensure expected values and name→tankId mapping are loaded.
+    // Both are in-memory cached so after first call this is instant.
+    await Promise.all([getWn8Exp(), getWgData(config)]);
+
+    return battles.map(b => {
+      // Prefer tag-based lookup (exact match to WG internal vehicle tag) over name matching
+      const tankId = memTagToTankId?.get(extractVehicleTag(b.tankKey))
+        ?? memNameToTankId?.get(b.tankName);
+      const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
+      const single = {
+        battles: 1,
+        wins: b.result === 'win' ? 1 : 0,
+        damage_dealt: b.damage,
+        frags: b.kills,
+        spotted: b.spotted,
+        dropped_capture_points: b.droppedCapture,
+      };
+      return {
+        ...b,
+        wn8: calculateWn8(single, exp),
+        wnx: calculateWnx(
+          { ...single, avg_damage_assisted_radio: b.assist },
+          exp,
+        ),
+      };
+    });
   });
 
   handle('replays:count', () => {

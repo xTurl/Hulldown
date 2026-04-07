@@ -30,16 +30,28 @@ const winRate = computed(() => {
 
 const top5Tanks = computed(() => tanksStore.tankList.slice(0, 5));
 
-const overallWnx = computed(() => {
+function weightedAvgFromTanks(getValue: (t: typeof tanksStore.tankList[number]) => number): number {
   if (tanksStore.tankList.length === 0) return 0;
   let totalBattles = 0;
-  let totalWnxWeighted = 0;
+  let weighted = 0;
   for (const t of tanksStore.tankList) {
-    totalWnxWeighted += t.wnx * t.battles;
+    const v = getValue(t);
+    if (!isFinite(v)) continue; // skip any NaN/Infinity from bad data
+    weighted += v * t.battles;
     totalBattles += t.battles;
   }
-  return totalBattles > 0 ? Math.round(totalWnxWeighted / totalBattles) : 0;
-});
+  return totalBattles > 0 ? Math.round(weighted / totalBattles) : 0;
+}
+
+// Computed from per-tank data using real WN8 formula — more accurate than playerInfo.wn8
+// which is stored in cache and may reflect the old approximation formula.
+const overallWn8 = computed(() =>
+  weightedAvgFromTanks(t => t.wn8) || playerStore.playerInfo?.wn8 || 0
+);
+
+const overallWnx = computed(() =>
+  weightedAvgFromTanks(t => t.wnx)
+);
 
 const chartOption = computed(() => {
   if (progress.value.length < 2) return null;
@@ -166,7 +178,7 @@ onMounted(async () => {
     <div v-if="playerStore.playerInfo" class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <StatCard title="Total battles" :value="playerStore.playerInfo.statistics.battles.toLocaleString('en-US')" subtitle="all tanks" />
       <StatCard title="Win Rate" :value="winRate" :color="getWrColor(parseFloat(winRate))" />
-      <StatCard title="WN8" :value="playerStore.playerInfo.wn8 || 0" :color="getWn8Color(playerStore.playerInfo.wn8 || 0)" subtitle="approximate" />
+      <StatCard title="WN8" :value="overallWn8" :color="getWn8Color(overallWn8)" />
       <StatCard title="WNX" :value="overallWnx" :color="getWn8Color(overallWnx)" subtitle="with assist" />
       <StatCard title="Tanks in garage" :value="tanksStore.tankList.length" subtitle="with battles" />
     </div>
