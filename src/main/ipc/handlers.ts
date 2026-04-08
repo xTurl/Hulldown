@@ -5,6 +5,7 @@ import * as wgService from '../services/wargaming';
 import * as newsService from '../services/news';
 import * as claudeService from '../services/claude';
 import * as replayParser from '../services/replay-parser';
+import * as updaterService from '../services/updater';
 import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
 import type { Tank, TankDetails, BattleRecord } from '../../shared/types';
@@ -444,6 +445,8 @@ export function registerHandlers(): void {
     const config = configService.getConfig();
     return cacheService.getSessions(config.accountId, assertOptionalNumber(limit, 'limit', 30));
   });
+
+  handle('update:check', () => updaterService.checkForUpdates());
 
   handle('shell:openExternal', (url) => {
     const urlStr = url as string;

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { Tank } from '../../shared/types';
+import { friendlyWgError } from '../../shared/utils/wgErrors';
 
 export const useTanksStore = defineStore('tanks', () => {
   const tankList = ref<Tank[]>([]);
@@ -13,7 +14,8 @@ export const useTanksStore = defineStore('tanks', () => {
     try {
       tankList.value = await window.api.getTankList();
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch tank list';
+      console.error('[tanks:list]', e);
+      error.value = friendlyWgError(e, 'Failed to load tank list');
     } finally {
       loading.value = false;
     }

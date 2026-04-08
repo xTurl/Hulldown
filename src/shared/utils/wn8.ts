@@ -1,14 +1,21 @@
 export function getWn8Color(wn8: number): string {
-  if (wn8 < 300) return '#f05555';  // Very Bad    — red
-  if (wn8 < 450) return '#e88a00';  // Bad         — orange
-  if (wn8 < 650) return '#d4b800';  // Below avg   — yellow
-  if (wn8 < 900) return '#96b82c';  // Average     — yellow-green
-  if (wn8 < 1200) return '#52a84a'; // Above avg   — green
-  if (wn8 < 1600) return '#38b8d4'; // Good        — teal
-  if (wn8 < 1900) return '#5590e8'; // Very Good   — blue
-  if (wn8 < 2350) return '#a05de8'; // Great       — purple
-  if (wn8 < 2900) return '#c264f0'; // Unicum      — light purple
-  return '#e040fb';                  // Super Unicum — bright magenta
+  if (wn8 <= 100)  return '#dd2222';  // dark red
+  if (wn8 <= 200)  return '#dd5533';  // red
+  if (wn8 <= 400)  return '#dd7700';  // dark orange
+  if (wn8 <= 600)  return '#ddaa00';  // orange
+  if (wn8 <= 800)  return '#ddcc00';  // light orange
+  if (wn8 <= 1000) return '#aacc00';  // yellow
+  if (wn8 <= 1300) return '#66cc22';  // light green
+  if (wn8 <= 1600) return '#33aa33';  // green
+  if (wn8 <= 1800) return '#228844';  // darker green
+  if (wn8 <= 2000) return '#22bbdd';  // light blue
+  if (wn8 <= 2200) return '#2299ee';  // blue
+  if (wn8 <= 2300) return '#1166cc';  // darker blue
+  if (wn8 <= 2400) return '#aa77ff';  // light purple
+  if (wn8 <= 2600) return '#9955ff';  // purple
+  if (wn8 <= 3100) return '#7733ee';  // darker purple
+  if (wn8 <= 4000) return '#6622cc';  // even darker purple
+  return '#bb44ff';                    // super unicum — bright magenta-purple
 }
 
 export function getWn8Label(wn8: number): string {
@@ -78,14 +85,19 @@ export function calculateWn8(
   const rWin  = safeRatio(stats.wins        / n, exp.expWinRate);
 
   // XVM reference formula — https://wiki.modxvm.com/en/WN8
-  const rDmgN = Math.max(0, (rDmg - 0.22) / 0.78);
-  const rFragN = Math.max(0, Math.min(rDmg + 0.2, 1.5) * (rFrag - 0.12) / 0.88);
-  const rSpotN = Math.max(0, Math.min(rDmg + 0.1, 1.3) * (rSpot - 0.38) / 0.62);
-  const rDefN  = Math.max(0, Math.min(rDmg + 0.1, 1.0) * (rDef  - 0.10) / 0.90);
-  const rWinN  = Math.max(0, (rWin - 0.71) / 0.29);
+  // rDmgC is computed first; the other caps depend on it (not on raw rDmg).
+  const rDmgC  = Math.max(0, (rDmg - 0.22) / 0.78);
+  const rFragC = Math.max(0, Math.min(rDmgC + 0.2, (rFrag - 0.12) / 0.88));
+  const rSpotC = Math.max(0, Math.min(rDmgC + 0.1, (rSpot - 0.38) / 0.62));
+  const rDefC  = Math.max(0, Math.min(rDmgC + 0.1, (rDef  - 0.10) / 0.90));
+  const rWinC  = Math.max(0, (rWin - 0.71) / 0.29);
 
   return Math.max(0, Math.round(
-    980 * rDmgN + 210 * rFragN + 155 * rSpotN + 75 * rDefN + 145 * Math.min(1.8, rWinN),
+    980 * rDmgC +
+    210 * rDmgC  * rFragC +
+    155 * rFragC * rSpotC +
+    75  * rDefC  * rFragC +
+    145 * Math.min(1.8, rWinC),
   ));
 }
 
