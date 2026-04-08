@@ -30,7 +30,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
     const headerBuf = Buffer.alloc(8);
     fs.readSync(fd, headerBuf, 0, 8, 0);
     const numBlocks = headerBuf.readUInt32LE(4);
-    if (numBlocks < 2) return null; // incomplete replay — battle not finished
+    if (numBlocks === 0) return null; // empty file
 
     // Read block 0 (battle setup)
     const size0Buf = Buffer.alloc(4);
@@ -39,6 +39,31 @@ export function parseReplay(filePath: string): ParsedBattle | null {
     const block0Buf = Buffer.alloc(size0);
     fs.readSync(fd, block0Buf, 0, size0, 12);
     const block0 = JSON.parse(block0Buf.toString('utf-8'));
+
+    if (numBlocks < 2) {
+      // Battle was abandoned before it ended — only setup block exists.
+      // Return partial record with what we know; stats will be all zeros.
+      if (!block0.dateTime || !block0.playerVehicle) return null;
+      const [datePart, timePart] = (block0.dateTime as string).split(' ');
+      const [day, month, year] = datePart.split('.');
+      const playedAt = new Date(`${year}-${month}-${day}T${timePart}`).getTime();
+      const gameplayID: string = block0.gameplayID ?? 'ctf';
+      fs.closeSync(fd); fd = -1;
+      return {
+        arenaId:        `partial_${path.basename(filePath, '.wotreplay')}`,
+        playedAt,
+        tankKey:        block0.playerVehicle as string,
+        tankName:       formatTankName(block0.playerVehicle as string),
+        mapName:        (block0.mapDisplayName as string) ?? '',
+        battleType:     BATTLE_TYPE_LABELS[gameplayID] ?? gameplayID,
+        result:         'incomplete',
+        damage: 0, assist: 0, kills: 0, shots: 0, hits: 0, pens: 0,
+        spotted: 0, xp: 0, credits: 0, survived: false, duration: 0,
+        droppedCapture: 0, damageReceived: 0, damageBlocked: 0,
+        repairCost: 0, netCredits: 0, markOfMastery: 0, marksOnGun: 0,
+        lifeTime: 0, achievements: [],
+      };
+    }
 
     // Read block 1 (battle results)
     const size1Buf = Buffer.alloc(4);
@@ -124,7 +149,7 @@ export function detectPlayerFromReplays(replayDir: string): DetectedPlayer | nul
   let files: string[];
   try {
     files = fs.readdirSync(replayDir)
-      .filter(f => f.endsWith('.wotreplay') && f !== 'temp.wotreplay' && f !== 'replay_last_battle.wotreplay')
+      .filter(f => f.endsWith('.wotreplay') && f !== 'temp.wotreplay')
       .sort()
       .reverse();
   } catch { return null; }

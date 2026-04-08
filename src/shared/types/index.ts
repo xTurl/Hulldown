@@ -24,7 +24,7 @@ export interface BattleRecord {
   wnx?: number;
   mapName: string;
   battleType: string;
-  result: 'win' | 'loss' | 'draw';
+  result: 'win' | 'loss' | 'draw' | 'incomplete';
   damage: number;
   assist: number;
   kills: number;

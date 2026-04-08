@@ -250,7 +250,7 @@ export function getReplayMapStats(accountId: number, sinceMs: number): ReplayMap
            ROUND(AVG(kills), 2) as avgKills,
            ROUND(AVG(assist), 0) as avgAssist,
            ROUND(AVG(spotted), 2) as avgSpotted
-    FROM battles WHERE account_id = ? AND (? = 0 OR played_at >= ?)
+    FROM battles WHERE account_id = ? AND result != 'incomplete' AND (? = 0 OR played_at >= ?)
     GROUP BY map_name ORDER BY battles DESC
   `).all(accountId, cutoff, cutoff) as ReplayMapStat[];
 }
@@ -273,7 +273,7 @@ export function getReplayTankStats(accountId: number, sinceMs: number): ReplayTa
            ROUND(AVG(damage_blocked), 0) as avgBlocked,
            SUM(net_credits) as netCredits,
            MAX(mark_of_mastery) as bestMastery
-    FROM battles WHERE account_id = ? AND (? = 0 OR played_at >= ?)
+    FROM battles WHERE account_id = ? AND result != 'incomplete' AND (? = 0 OR played_at >= ?)
     GROUP BY tank_key ORDER BY battles DESC
   `).all(accountId, cutoff, cutoff) as ReplayTankStat[];
 }
@@ -292,7 +292,7 @@ export function getEconomyByDay(accountId: number, days: number): EconomyDay[] {
            SUM(net_credits) as netCredits,
            SUM(credits) as grossCredits,
            SUM(repair_cost) as totalRepairs
-    FROM battles WHERE account_id = ? AND (? = 0 OR played_at >= ?)
+    FROM battles WHERE account_id = ? AND result != 'incomplete' AND (? = 0 OR played_at >= ?)
     GROUP BY day ORDER BY day ASC
   `).all(accountId, cutoff, cutoff) as EconomyDay[];
 }
@@ -341,7 +341,7 @@ export function getTodaySession(accountId: number): TodaySession | null {
            COUNT(DISTINCT tank_key) as tankCount,
            SUM(damage) as totalDamage, SUM(kills) as totalFrags,
            SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped
-    FROM battles WHERE account_id = ? AND played_at >= ?
+    FROM battles WHERE account_id = ? AND result != 'incomplete' AND played_at >= ?
   `).get(accountId, midnight.getTime()) as TodaySession & { battles: number } | undefined;
   if (!row || row.battles === 0) return null;
   return { ...row, totalWins: row.wins };
@@ -366,7 +366,7 @@ export function getReplayTankContext(
            ROUND(AVG(CAST(life_time AS REAL) / NULLIF(duration, 0) * 100), 1) as avgLifePct,
            ROUND(AVG(net_credits), 0) as avgNetCredits,
            MAX(mark_of_mastery) as bestMastery
-    FROM battles WHERE account_id = ? AND tank_name = ? AND (? = 0 OR played_at >= ?)
+    FROM battles WHERE account_id = ? AND result != 'incomplete' AND tank_name = ? AND (? = 0 OR played_at >= ?)
   `).get(accountId, tankName, cutoff, cutoff) as Record<string, number> | undefined;
 
   if (!row || row.battles === 0) return null;
@@ -375,7 +375,7 @@ export function getReplayTankContext(
     SELECT map_name as mapName, COUNT(*) as battles,
            ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
            ROUND(AVG(damage), 0) as avgDamage
-    FROM battles WHERE account_id = ? AND tank_name = ?
+    FROM battles WHERE account_id = ? AND result != 'incomplete' AND tank_name = ?
     GROUP BY map_name HAVING COUNT(*) >= 2
     ORDER BY COUNT(*) DESC LIMIT 10
   `).all(accountId, tankName) as { mapName: string; battles: number; winRate: number; avgDamage: number }[];
@@ -401,7 +401,7 @@ export function getSessions(accountId: number, limit = 20): SessionSummary[] {
     WITH ordered AS (
       SELECT played_at, result, damage, kills, net_credits,
              LAG(played_at) OVER (ORDER BY played_at) as prev_at
-      FROM battles WHERE account_id = ?
+      FROM battles WHERE account_id = ? AND result != 'incomplete'
     ),
     with_session AS (
       SELECT *,

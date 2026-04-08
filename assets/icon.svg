@@ -2,39 +2,17 @@
   <!-- Background -->
   <rect width="256" height="256" rx="40" fill="#0a0e1a"/>
 
-  <!-- Tracks -->
-  <rect x="22" y="158" width="212" height="48" rx="24" fill="#8a6a1e"/>
-  <!-- Track detail lines -->
-  <rect x="22" y="169" width="212" height="4" rx="2" fill="#6b5118" opacity="0.6"/>
-  <rect x="22" y="179" width="212" height="4" rx="2" fill="#6b5118" opacity="0.6"/>
-  <rect x="22" y="189" width="212" height="4" rx="2" fill="#6b5118" opacity="0.6"/>
-  <!-- Wheels -->
-  <circle cx="54"  cy="182" r="18" fill="#0a0e1a" stroke="#C89B3C" stroke-width="4"/>
-  <circle cx="128" cy="182" r="18" fill="#0a0e1a" stroke="#C89B3C" stroke-width="4"/>
-  <circle cx="202" cy="182" r="18" fill="#0a0e1a" stroke="#C89B3C" stroke-width="4"/>
-  <circle cx="54"  cy="182" r="7"  fill="#C89B3C"/>
-  <circle cx="128" cy="182" r="7"  fill="#C89B3C"/>
-  <circle cx="202" cy="182" r="7"  fill="#C89B3C"/>
-
-  <!-- Hull -->
-  <polygon points="36,158 220,158 210,112 46,112" fill="#C89B3C"/>
-  <!-- Hull shading -->
-  <polygon points="36,158 220,158 210,140 46,140" fill="#b8890a" opacity="0.3"/>
-
-  <!-- Turret -->
-  <rect x="78" y="72" width="110" height="48" rx="14" fill="#E8B84B"/>
-  <!-- Turret shading -->
-  <rect x="78" y="72" width="110" height="18" rx="14" fill="white" opacity="0.08"/>
-
-  <!-- Barrel -->
-  <rect x="178" y="88" width="68" height="16" rx="8" fill="#d4a535"/>
-  <!-- Barrel highlight -->
-  <rect x="178" y="88" width="68" height="5" rx="4" fill="white" opacity="0.15"/>
-
-  <!-- Hatch -->
-  <circle cx="118" cy="90" r="14" fill="#c8940a" stroke="#E8B84B" stroke-width="2"/>
-  <circle cx="118" cy="90" r="5"  fill="#E8B84B"/>
-
-  <!-- Star / emblem hint -->
-  <circle cx="152" cy="90" r="10" fill="none" stroke="#E8B84B" stroke-width="2" opacity="0.6"/>
+  <!-- Logo icon centered: scale(2) + translate(32, 64) to center 192×128 in 256×256 -->
+  <g transform="translate(32, 64) scale(2)">
+    <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35"/>
+    <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6"/>
+    <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b"/>
+    <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a"/>
+    <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b"/>
+    <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640"/>
+    <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3"/>
+    <ellipse cx="8"  cy="44" rx="10" ry="3" fill="#181a20"/>
+    <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20"/>
+    <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06"/>
+  </g>
 </svg>

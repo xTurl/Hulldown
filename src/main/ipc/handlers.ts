@@ -410,6 +410,7 @@ export function registerHandlers(): void {
         spotted: b.spotted,
         dropped_capture_points: b.droppedCapture,
       };
+      if (b.result === 'incomplete') return { ...b, wn8: undefined, wnx: undefined };
       return {
         ...b,
         wn8: calculateWn8(single, exp),

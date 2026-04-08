@@ -158,7 +158,8 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
             </div>
             <div class="flex items-center gap-3 mt-1 text-xs text-muted">
               <span>{{ formatTime(b.playedAt) }}</span>
-              <span>{{ formatDuration(b.duration) }}</span>
+              <span v-if="b.result !== 'incomplete'">{{ formatDuration(b.duration) }}</span>
+              <span v-if="b.result === 'incomplete'" class="text-faint italic">abandoned</span>
               <span v-if="b.survived" class="text-teal-500">survived</span>
             </div>
           </div>
