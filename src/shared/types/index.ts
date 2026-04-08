@@ -1,3 +1,9 @@
+export interface UpdateInfo {
+  version: string;
+  releaseUrl: string;
+  downloadUrl: string | null;
+}
+
 export interface AppConfig {
   claudeApiKey: string;
   accountId: number;

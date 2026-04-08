@@ -3,14 +3,16 @@ import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import StatCard from '../components/StatCard.vue';
-import type { TankDetails } from '../../shared/types';
+import type { TankDetails, AppConfig } from '../../shared/types';
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
 
 const tank = ref<TankDetails | null>(null);
+const config = ref<AppConfig | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
+const aiError = ref<string | null>(null);
 const activeTab = ref<'stats' | 'maps' | 'ai'>('stats');
 const generatingAI = ref(false);
 const replayMaps = ref<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]>([]);
@@ -18,12 +20,16 @@ const fetchingMaps = ref(false);
 const mapsError = ref<string | null>(null);
 
 const tankId = computed(() => Number(props.id));
+const hasApiKey = computed(() => !!config.value?.claudeApiKey);
 
 async function loadTank() {
   loading.value = true;
   error.value = null;
   try {
-    tank.value = await window.api.getTankDetails(tankId.value);
+    [tank.value, config.value] = await Promise.all([
+      window.api.getTankDetails(tankId.value),
+      window.api.getConfig(),
+    ]);
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load tank data';
   } finally {
@@ -32,11 +38,17 @@ async function loadTank() {
 }
 
 async function generateAI(force = false) {
+  aiError.value = null;
   generatingAI.value = true;
   try {
     tank.value = await window.api.getTankRecommendations(tankId.value, force);
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to generate recommendations';
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('401') || msg.toLowerCase().includes('authentication') || msg.toLowerCase().includes('invalid x-api-key')) {
+      aiError.value = 'Invalid Claude API key. Please check your key in Settings.';
+    } else {
+      aiError.value = msg || 'Failed to generate recommendations';
+    }
   } finally {
     generatingAI.value = false;
   }
@@ -215,13 +227,21 @@ onMounted(loadTank);
           <div class="bg-card border border-line rounded-xl p-8 text-center">
             <p class="text-muted mb-2">AI tips haven't been generated yet</p>
             <p class="text-sm text-faint mb-4">Click below to generate personalized tips for this tank (1 Claude API request).</p>
-            <button
-              @click="generateAI"
-              :disabled="generatingAI"
-              class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
-            >
-              {{ generatingAI ? 'Generating tips...' : '✨ Generate AI tips' }}
-            </button>
+            <div v-if="!hasApiKey" class="mb-4 px-4 py-2.5 bg-sub border border-line rounded-lg text-sm text-muted inline-block">
+              Set your Claude API key in <strong class="text-fg">Settings</strong> to use AI tips.
+            </div>
+            <div v-else-if="aiError" class="mb-4 px-4 py-2.5 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-300 inline-block">
+              {{ aiError }}
+            </div>
+            <div>
+              <button
+                @click="generateAI"
+                :disabled="generatingAI || !hasApiKey"
+                class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
+              >
+                {{ generatingAI ? 'Generating tips...' : '✨ Generate AI tips' }}
+              </button>
+            </div>
           </div>
         </div>
         <div v-else class="space-y-4">
@@ -258,6 +278,9 @@ onMounted(loadTank);
                 {{ tip }}
               </li>
             </ol>
+          </div>
+          <div v-if="aiError" class="px-4 py-2.5 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-300">
+            {{ aiError }}
           </div>
           <div class="flex items-center justify-between">
             <p class="text-xs text-faint">

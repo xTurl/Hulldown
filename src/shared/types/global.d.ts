@@ -1,4 +1,4 @@
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord } from './index';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord, UpdateInfo } from './index';
 import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession } from '../../main/services/cache';
 import type { DetectedPlayer } from '../../main/services/replay-parser';
 
@@ -28,6 +28,8 @@ declare global {
       getEconomy(days?: number): Promise<EconomyDay[]>;
       getSessions(limit?: number): Promise<SessionSummary[]>;
       openExternal(url: string): Promise<void>;
+      checkForUpdates(): Promise<UpdateInfo | null>;
+      clearMemCache(): Promise<void>;
     };
   }
 }

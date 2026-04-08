@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord } from '../shared/types';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord, UpdateInfo } from '../shared/types';
 
 contextBridge.exposeInMainWorld('api', {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
@@ -28,4 +28,5 @@ contextBridge.exposeInMainWorld('api', {
   getEconomy: (days?: number): Promise<import('../main/services/cache').EconomyDay[]> => ipcRenderer.invoke('replays:economy', days),
   getSessions: (limit?: number): Promise<import('../main/services/cache').SessionSummary[]> => ipcRenderer.invoke('replays:sessions', limit),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
+  checkForUpdates: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
 });

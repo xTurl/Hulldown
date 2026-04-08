@@ -65,13 +65,10 @@ onUnmounted(() => {
 
 defineExpose({ scan });
 
-function resultStyle(result: BattleRecord['result']) {
-  const map = {
-    win:  { bg: 'bg-green-500/15 border-green-500/40',  text: 'text-green-400',  label: 'WIN'  },
-    loss: { bg: 'bg-red-500/15 border-red-500/40',      text: 'text-red-400',    label: 'LOSS' },
-    draw: { bg: 'bg-gray-500/15 border-gray-500/40',    text: 'text-gray-400',   label: 'DRAW' },
-  };
-  return map[result];
+function rowBg(result: BattleRecord['result']): string {
+  if (result === 'win')  return 'bg-green-500/10 hover:bg-green-500/[0.16]';
+  if (result === 'loss') return 'bg-red-500/[0.13] hover:bg-red-500/20';
+  return 'hover:bg-sub';
 }
 
 function accuracy(hits: number, shots: number): string {
@@ -138,18 +135,9 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
       <div
         v-for="b in battles"
         :key="b.id"
-        class="px-5 py-4 hover:bg-sub transition-colors"
+        :class="['px-5 py-4 transition-colors', rowBg(b.result)]"
       >
         <div class="flex items-start gap-4">
-
-          <!-- Result badge -->
-          <div
-            :class="['border rounded-lg px-2.5 py-1 flex-shrink-0 mt-0.5', resultStyle(b.result).bg]"
-          >
-            <span :class="['text-xs font-bold tracking-wide', resultStyle(b.result).text]">
-              {{ resultStyle(b.result).label }}
-            </span>
-          </div>
 
           <!-- Tank + context -->
           <div class="flex-1 min-w-0">
@@ -164,14 +152,14 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
               </span>
             </div>
             <div class="flex items-baseline gap-2 mt-0.5 flex-wrap">
-              <span class="text-xs text-faint">{{ b.mapName }}</span>
+              <span class="text-xs text-muted">{{ b.mapName }}</span>
               <span class="text-xs text-faint">·</span>
-              <span class="text-xs text-faint">{{ b.battleType }}</span>
+              <span class="text-xs text-muted">{{ b.battleType }}</span>
             </div>
-            <div class="flex items-center gap-3 mt-1 text-xs text-faint">
+            <div class="flex items-center gap-3 mt-1 text-xs text-muted">
               <span>{{ formatTime(b.playedAt) }}</span>
               <span>{{ formatDuration(b.duration) }}</span>
-              <span v-if="b.survived" class="text-teal-600">survived</span>
+              <span v-if="b.survived" class="text-teal-500">survived</span>
             </div>
           </div>
 
@@ -180,7 +168,7 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
             <!-- WN8 -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
-              <p class="text-xs text-faint mb-0.5">WN8</p>
+              <p class="text-xs text-muted mb-0.5">WN8</p>
               <p class="text-sm font-bold" :style="{ color: getWn8Color(battleWn8(b) ?? 0) }">
                 {{ battleWn8(b) !== undefined ? battleWn8(b) : '—' }}
               </p>
@@ -188,7 +176,7 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
             <!-- WNX -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
-              <p class="text-xs text-faint mb-0.5">WNX</p>
+              <p class="text-xs text-muted mb-0.5">WNX</p>
               <p class="text-sm font-bold" :style="{ color: getWn8Color(battleWnx(b) ?? 0) }">
                 {{ battleWnx(b) !== undefined ? battleWnx(b) : '—' }}
               </p>
@@ -196,7 +184,7 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
             <!-- Damage -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[64px]">
-              <p class="text-xs text-faint mb-0.5">Damage</p>
+              <p class="text-xs text-muted mb-0.5">Damage</p>
               <p class="text-sm font-bold text-fg">
                 {{ b.damage > 0 ? b.damage.toLocaleString('en-US') : '—' }}
               </p>
@@ -204,25 +192,25 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
             <!-- Assist -->
             <div v-if="b.assist > 0" class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
-              <p class="text-xs text-faint mb-0.5">Assist</p>
+              <p class="text-xs text-muted mb-0.5">Assist</p>
               <p class="text-sm font-bold text-muted">{{ b.assist.toLocaleString('en-US') }}</p>
             </div>
 
             <!-- Frags -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[48px]">
-              <p class="text-xs text-faint mb-0.5">Frags</p>
+              <p class="text-xs text-muted mb-0.5">Frags</p>
               <p class="text-sm font-bold text-fg">{{ b.kills }}</p>
             </div>
 
             <!-- Accuracy -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
-              <p class="text-xs text-faint mb-0.5">Acc</p>
+              <p class="text-xs text-muted mb-0.5">Acc</p>
               <p class="text-sm font-bold text-fg">{{ accuracy(b.hits, b.shots) }}</p>
             </div>
 
             <!-- XP -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[52px]">
-              <p class="text-xs text-faint mb-0.5">XP</p>
+              <p class="text-xs text-muted mb-0.5">XP</p>
               <p class="text-sm font-bold text-muted">{{ b.xp.toLocaleString('en-US') }}</p>
             </div>
 

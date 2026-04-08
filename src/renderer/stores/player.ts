@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { PlayerInfo } from '../../shared/types';
+import { friendlyWgError } from '../../shared/utils/wgErrors';
 
 export const usePlayerStore = defineStore('player', () => {
   const playerInfo = ref<PlayerInfo | null>(null);
@@ -13,7 +14,8 @@ export const usePlayerStore = defineStore('player', () => {
     try {
       playerInfo.value = await window.api.getPlayerInfo();
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch player data';
+      console.error('[player:info]', e);
+      error.value = friendlyWgError(e, 'Failed to load player data');
     } finally {
       loading.value = false;
     }
