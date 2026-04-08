@@ -1,7 +1,7 @@
 {
   "name": "hulldown",
   "productName": "hulldown",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "AI-Powered desktop app with your WoT statistics.",
   "main": ".vite/build/main.js",
   "private": true,
