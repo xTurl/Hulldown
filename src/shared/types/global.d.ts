@@ -27,6 +27,7 @@ declare global {
       getTankRecentStats(sinceMs?: number): Promise<ReplayTankStat[]>;
       getEconomy(days?: number): Promise<EconomyDay[]>;
       getSessions(limit?: number): Promise<SessionSummary[]>;
+      selectFolder(): Promise<string | null>;
       openExternal(url: string): Promise<void>;
       checkForUpdates(): Promise<UpdateInfo | null>;
       clearMemCache(): Promise<void>;

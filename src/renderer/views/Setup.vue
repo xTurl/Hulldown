@@ -20,6 +20,11 @@ const detectedRegion = ref('');
 const claudeApiKey = ref('');
 const saving = ref(false);
 
+async function browseFolder() {
+  const dir = await window.api.selectFolder();
+  if (dir) replaysDir.value = dir;
+}
+
 async function detect() {
   if (!replaysDir.value.trim()) return;
   detecting.value = true;
@@ -89,17 +94,20 @@ async function finish() {
         </p>
         <div>
           <label class="block text-xs text-muted mb-1">Replays directory</label>
-          <input
-            v-model="replaysDir"
-            @keyup.enter="detect"
-            placeholder="/path/to/World of Tanks/eu/replays"
-            class="w-full bg-sub border border-line rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none placeholder-faint font-mono"
-            @focus="(e) => (e.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
-            @blur="(e) => (e.target as HTMLInputElement).style.borderColor = ''"
-          />
-          <p class="text-xs text-faint mt-1">
-            Common paths: <span class="font-mono">~/.steam/.../World of Tanks/eu/replays</span>
-          </p>
+          <div class="flex gap-2">
+            <input
+              v-model="replaysDir"
+              @keyup.enter="detect"
+              placeholder="Select your WoT replays folder..."
+              class="flex-1 bg-sub border border-line rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none placeholder-faint font-mono min-w-0"
+              @focus="(e) => (e.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
+              @blur="(e) => (e.target as HTMLInputElement).style.borderColor = ''"
+            />
+            <button
+              @click="browseFolder"
+              class="shrink-0 px-3 py-2.5 bg-sub border border-line rounded-lg text-sm text-muted hover:text-fg hover:border-gold/50 transition-colors"
+            >Browse</button>
+          </div>
         </div>
 
         <div v-if="detectError" class="text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">

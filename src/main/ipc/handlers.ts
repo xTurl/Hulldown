@@ -1,4 +1,4 @@
-import { ipcMain, shell } from 'electron';
+import { ipcMain, shell, dialog } from 'electron';
 import * as configService from '../services/config';
 import * as cacheService from '../services/cache';
 import * as wgService from '../services/wargaming';
@@ -447,6 +447,13 @@ export function registerHandlers(): void {
   });
 
   handle('update:check', () => updaterService.checkForUpdates());
+
+  handle('dialog:openFolder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
 
   handle('shell:openExternal', (url) => {
     const urlStr = url as string;

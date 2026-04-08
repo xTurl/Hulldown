@@ -21,7 +21,9 @@ const config: ForgeConfig = {
       'node_modules/file-uri-to-path',
     ],
   },
-  rebuildConfig: {},
+  rebuildConfig: {
+    force: true,
+  },
   hooks: {
     postPackage: async (_config, options) => {
       const nativeModules = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
