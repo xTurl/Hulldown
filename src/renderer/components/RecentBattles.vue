@@ -214,6 +214,14 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
               <p class="text-sm font-bold text-muted">{{ b.xp.toLocaleString('en-US') }}</p>
             </div>
 
+            <!-- Net credits -->
+            <div v-if="b.credits > 0" class="text-center bg-sub rounded-lg px-3 py-2 min-w-[72px]">
+              <p class="text-xs text-muted mb-0.5">Credits</p>
+              <p class="text-sm font-bold" :style="{ color: b.netCredits >= 0 ? '#34d399' : '#f87171' }">
+                {{ b.netCredits >= 0 ? '+' : '' }}{{ b.netCredits.toLocaleString('en-US') }}
+              </p>
+            </div>
+
           </div>
         </div>
       </div>

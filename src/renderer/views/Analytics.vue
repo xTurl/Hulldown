@@ -2,6 +2,13 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../../main/services/cache';
 import { getWn8Color } from '../../shared/utils/wn8';
+import { use } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { BarChart, LineChart } from 'echarts/charts';
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import VChart from 'vue-echarts';
+
+use([CanvasRenderer, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 
 type Tab = 'economy' | 'maps' | 'tanks' | 'sessions';
 const activeTab = ref<Tab>('economy');
@@ -15,20 +22,108 @@ const economySummary = computed(() => {
   if (!economyData.value.length) return null;
   const total = economyData.value.reduce((a, d) => ({
     battles: a.battles + d.battles,
+    wins: a.wins + d.wins,
     netCredits: a.netCredits + d.netCredits,
     totalRepairs: a.totalRepairs + d.totalRepairs,
     grossCredits: a.grossCredits + d.grossCredits,
-  }), { battles: 0, netCredits: 0, totalRepairs: 0, grossCredits: 0 });
+  }), { battles: 0, wins: 0, netCredits: 0, totalRepairs: 0, grossCredits: 0 });
   return {
     ...total,
     avgPerBattle: total.battles ? Math.round(total.netCredits / total.battles) : 0,
+    winRate: total.battles ? (total.wins / total.battles) * 100 : 0,
     bestDay: [...economyData.value].sort((a, b) => b.netCredits - a.netCredits)[0],
   };
 });
 
-const maxDayCredits = computed(() =>
-  Math.max(...economyData.value.map(d => Math.abs(d.netCredits)), 1)
-);
+const economyChartOption = computed(() => {
+  if (!economyData.value.length) return null;
+  const style = getComputedStyle(document.documentElement);
+  const colorCard = style.getPropertyValue('--card').trim();
+  const colorFg = style.getPropertyValue('--fg').trim();
+  const colorMuted = style.getPropertyValue('--muted').trim();
+  const colorLine = style.getPropertyValue('--line').trim();
+  const colorGold = style.getPropertyValue('--gold').trim();
+
+  const days = [...economyData.value];
+  const dates = days.map(d => d.day);
+  const netVals = days.map(d => d.netCredits);
+  let sum = 0;
+  const cumulative = netVals.map(v => { sum += v; return sum; });
+
+  return {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: colorCard,
+      borderColor: colorLine,
+      textStyle: { color: colorFg, fontSize: 12 },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter(params: any[]) {
+        const idx = params[0].dataIndex as number;
+        const d = days[idx];
+        const wr = d.battles ? ((d.wins / d.battles) * 100).toFixed(1) : '—';
+        let html = `<div style="font-weight:600;margin-bottom:4px">${d.day}</div>`;
+        html += `<div style="font-size:11px;margin-bottom:4px">Battles: ${d.battles} &nbsp;·&nbsp; WR: ${wr}%</div>`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        params.forEach((p: any) => {
+          const val = Math.round(p.value as number);
+          const sign = val >= 0 ? '+' : '';
+          html += `<div>${p.marker}${p.seriesName}: <b>${sign}${val.toLocaleString('en-US')}</b></div>`;
+        });
+        return html;
+      },
+    },
+    grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLabel: { color: colorMuted, fontSize: 10 },
+      axisLine: { lineStyle: { color: colorLine } },
+      axisTick: { show: false },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        axisLabel: {
+          color: colorMuted, fontSize: 10,
+          formatter: (v: number) => (v >= 0 ? '+' : '') + (v / 1000).toFixed(0) + 'k',
+        },
+        splitLine: { lineStyle: { color: colorLine, opacity: 0.5 } },
+      },
+      {
+        type: 'value',
+        axisLabel: {
+          color: colorMuted, fontSize: 10,
+          formatter: (v: number) => (v / 1000).toFixed(0) + 'k',
+        },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        name: 'Net credits',
+        type: 'bar',
+        yAxisIndex: 0,
+        barMaxWidth: 32,
+        data: netVals.map(v => ({
+          value: v,
+          itemStyle: { color: v >= 0 ? '#34d399' : '#f87171', opacity: 0.85 },
+        })),
+      },
+      {
+        name: 'Cumulative',
+        type: 'line',
+        yAxisIndex: 1,
+        smooth: true,
+        data: cumulative,
+        lineStyle: { color: colorGold, width: 2 },
+        itemStyle: { color: colorGold },
+        symbol: 'none',
+        areaStyle: { color: colorGold + '22' },
+      },
+    ],
+  };
+});
 
 async function loadEconomy() {
   economyLoading.value = true;
@@ -169,52 +264,53 @@ function sessionDuration(s: SessionSummary) {
         <div v-if="economyLoading" class="py-16 text-center text-faint animate-pulse">Loading...</div>
         <template v-else-if="economySummary">
           <!-- Summary cards -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div class="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
             <div class="bg-card border border-line rounded-xl p-4">
               <p class="text-xs text-faint mb-1">Net credits</p>
-              <p class="text-xl font-bold" :style="{ color: creditsColor(economySummary.netCredits) }">
+              <p class="text-lg font-bold" :style="{ color: creditsColor(economySummary.netCredits) }">
                 {{ formatCredits(economySummary.netCredits) }}
               </p>
             </div>
             <div class="bg-card border border-line rounded-xl p-4">
               <p class="text-xs text-faint mb-1">Per battle</p>
-              <p class="text-xl font-bold" :style="{ color: creditsColor(economySummary.avgPerBattle) }">
+              <p class="text-lg font-bold" :style="{ color: creditsColor(economySummary.avgPerBattle) }">
                 {{ formatCredits(economySummary.avgPerBattle) }}
               </p>
             </div>
             <div class="bg-card border border-line rounded-xl p-4">
-              <p class="text-xs text-faint mb-1">Repairs paid</p>
-              <p class="text-xl font-bold text-red-400">-{{ economySummary.totalRepairs.toLocaleString('en-US') }}</p>
+              <p class="text-xs text-faint mb-1">Battles</p>
+              <p class="text-lg font-bold text-fg">{{ economySummary.battles.toLocaleString('en-US') }}</p>
             </div>
             <div class="bg-card border border-line rounded-xl p-4">
-              <p class="text-xs text-faint mb-1">Best day</p>
-              <p class="text-xl font-bold text-green-400">{{ formatCredits(economySummary.bestDay.netCredits) }}</p>
-              <p class="text-xs text-faint mt-0.5">{{ economySummary.bestDay.day }}</p>
+              <p class="text-xs text-faint mb-1">Win rate</p>
+              <p class="text-lg font-bold" :style="{ color: wrColor(economySummary.winRate) }">
+                {{ economySummary.winRate.toFixed(1) }}%
+              </p>
+            </div>
+            <div class="bg-card border border-line rounded-xl p-4">
+              <p class="text-xs text-faint mb-1">Gross earned</p>
+              <p class="text-lg font-bold text-fg">{{ Math.round(economySummary.grossCredits).toLocaleString('en-US') }}</p>
+            </div>
+            <div class="bg-card border border-line rounded-xl p-4">
+              <p class="text-xs text-faint mb-1">Repairs</p>
+              <p class="text-lg font-bold text-red-400">-{{ economySummary.totalRepairs.toLocaleString('en-US') }}</p>
             </div>
           </div>
 
-          <!-- Per-day bars -->
+          <!-- Credits chart -->
           <div class="bg-card border border-line rounded-xl p-5">
-            <h3 class="text-sm font-semibold text-muted mb-4">Net credits by day</h3>
-            <div class="space-y-2">
-              <div v-for="d in [...economyData].reverse()" :key="d.day" class="flex items-center gap-3">
-                <span class="text-xs text-faint w-24 flex-shrink-0 text-right">{{ d.day }}</span>
-                <div class="flex-1 h-5 bg-sub rounded overflow-hidden relative">
-                  <div
-                    class="absolute top-0 bottom-0 rounded transition-all"
-                    :style="{
-                      width: (Math.abs(d.netCredits) / maxDayCredits * 100) + '%',
-                      backgroundColor: d.netCredits >= 0 ? '#34d399' : '#f87171',
-                      opacity: 0.7,
-                    }"
-                  />
-                </div>
-                <span class="text-xs w-28 flex-shrink-0" :style="{ color: creditsColor(d.netCredits) }">
-                  {{ formatCredits(d.netCredits) }}
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-semibold text-muted">Credits by day</h3>
+              <div class="flex items-center gap-4 text-xs text-faint">
+                <span class="flex items-center gap-1.5">
+                  <span class="inline-block w-3 h-2 rounded-sm bg-emerald-400 opacity-80"></span>Net / day
                 </span>
-                <span class="text-xs text-faint w-16 flex-shrink-0">{{ d.battles }}b {{ d.wins }}w</span>
+                <span class="flex items-center gap-1.5">
+                  <span class="inline-block w-6 h-0.5" style="background:var(--gold)"></span>Cumulative
+                </span>
               </div>
             </div>
+            <VChart :option="economyChartOption" :autoresize="true" style="height: 260px" />
           </div>
         </template>
         <div v-else class="py-16 text-center text-faint text-sm">No economy data yet. Scan replays first.</div>
