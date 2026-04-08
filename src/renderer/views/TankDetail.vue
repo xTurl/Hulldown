@@ -1,9 +1,55 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import StatCard from '../components/StatCard.vue';
 import type { TankDetails, AppConfig } from '../../shared/types';
+
+import iconLight from '../assets/light.png';
+import iconLightPremium from '../assets/light_premium.png';
+import iconMedium from '../assets/medium.png';
+import iconMediumPremium from '../assets/medium_premium.png';
+import iconHeavy from '../assets/heavy.png';
+import iconHeavyPremium from '../assets/heavy_premium.png';
+import iconTD from '../assets/tank_destroyer.png';
+import iconTDPremium from '../assets/tank_destroyer_premium.png';
+import iconSPG from '../assets/artyllery.png';
+
+const TANK_TYPE_LABELS: Record<string, string> = {
+  lightTank: 'Light Tank',
+  mediumTank: 'Medium Tank',
+  heavyTank: 'Heavy Tank',
+  'AT-SPG': 'Tank Destroyer',
+  SPG: 'SPG',
+};
+
+const TANK_TYPE_ICONS: Record<string, { normal: string; premium?: string }> = {
+  lightTank:  { normal: iconLight,  premium: iconLightPremium },
+  mediumTank: { normal: iconMedium, premium: iconMediumPremium },
+  heavyTank:  { normal: iconHeavy,  premium: iconHeavyPremium },
+  'AT-SPG':   { normal: iconTD,     premium: iconTDPremium },
+  SPG:        { normal: iconSPG },
+};
+
+const NATION_FLAGS: Record<string, string> = {
+  france: '🇫🇷',
+  germany: '🇩🇪',
+  usa: '🇺🇸',
+  ussr: '🇷🇺',
+  uk: '🇬🇧',
+  japan: '🇯🇵',
+  china: '🇨🇳',
+  czech: '🇨🇿',
+  sweden: '🇸🇪',
+  poland: '🇵🇱',
+  italy: '🇮🇹',
+  netherlands: '🇳🇱',
+  pan_america: '🌎',
+};
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
@@ -78,6 +124,22 @@ const sortedMaps = computed(() =>
   [...replayMaps.value].sort((a, b) => b.battles - a.battles)
 );
 
+const tankTypeLabel = computed(() => tank.value ? (TANK_TYPE_LABELS[tank.value.type] ?? capitalize(tank.value.type)) : '');
+const tankTypeImg = computed(() => {
+  if (!tank.value) return '';
+  const icons = TANK_TYPE_ICONS[tank.value.type];
+  if (!icons) return '';
+  return (tank.value.isPremium && icons.premium) ? icons.premium : icons.normal;
+});
+const nationFlag = computed(() => tank.value ? (NATION_FLAGS[tank.value.nation] ?? '') : '');
+const nationLabel = computed(() => tank.value ? capitalize(tank.value.nation) : '');
+
+watch(activeTab, (tab) => {
+  if (tab === 'maps' && replayMaps.value.length === 0 && !fetchingMaps.value) {
+    fetchMaps();
+  }
+});
+
 onMounted(loadTank);
 </script>
 
@@ -102,7 +164,15 @@ onMounted(loadTank);
         <div>
           <div class="flex items-center gap-2 mb-1">
             <span v-if="tank.isPremium" class="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-400 rounded">Premium</span>
-            <span class="text-xs text-muted">Tier {{ tank.tier }} • {{ tank.type }} • {{ tank.nation }}</span>
+            <span class="text-xs text-muted flex items-center gap-1.5">
+              Tier {{ tank.tier }}
+              <span class="text-faint">·</span>
+              <span class="inline-flex items-center gap-1">
+                <img v-if="tankTypeImg" :src="tankTypeImg" class="w-5 h-5 object-contain" alt="" />{{ tankTypeLabel }}
+              </span>
+              <span class="text-faint">·</span>
+              {{ nationFlag }} {{ nationLabel }}
+            </span>
           </div>
           <h2 class="text-2xl font-bold text-fg">{{ tank.name }}</h2>
           <p class="text-sm text-muted mt-0.5">{{ tank.battles.toLocaleString('en-US') }} battles</p>
@@ -182,14 +252,17 @@ onMounted(loadTank);
 
       <!-- Maps tab -->
       <div v-else-if="activeTab === 'maps'">
-        <div v-if="sortedMaps.length === 0 && !fetchingMaps" class="bg-card border border-line rounded-xl p-8 text-center">
+        <div v-if="fetchingMaps" class="bg-card border border-line rounded-xl p-8 text-center">
+          <p class="text-muted animate-pulse">Loading map data...</p>
+        </div>
+        <div v-else-if="sortedMaps.length === 0" class="bg-card border border-line rounded-xl p-8 text-center">
           <p class="text-muted mb-2">No map data yet</p>
           <p class="text-sm text-faint mb-4">Map stats are built from your replay files (min. 2 battles per map).</p>
           <p v-if="mapsError" class="text-sm text-amber-400 mb-3">{{ mapsError }}</p>
-          <button @click="fetchMaps" :disabled="fetchingMaps"
-            class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
+          <button @click="fetchMaps"
+            class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 text-sm rounded-lg transition-opacity"
           >
-            {{ fetchingMaps ? 'Loading...' : '↓ Load from replays' }}
+            ↓ Load from replays
           </button>
         </div>
         <div v-else class="bg-card border border-line rounded-xl overflow-hidden">

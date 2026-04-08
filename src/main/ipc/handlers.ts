@@ -402,6 +402,7 @@ export function registerHandlers(): void {
       const tankId = memTagToTankId?.get(extractVehicleTag(b.tankKey))
         ?? memNameToTankId?.get(b.tankName);
       const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
+      const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
       const single = {
         battles: 1,
         wins: b.result === 'win' ? 1 : 0,
@@ -410,9 +411,11 @@ export function registerHandlers(): void {
         spotted: b.spotted,
         dropped_capture_points: b.droppedCapture,
       };
-      if (b.result === 'incomplete') return { ...b, wn8: undefined, wnx: undefined };
+      if (b.result === 'incomplete') return { ...b, tankType: vehicle?.type, tankIsPremium: vehicle?.is_premium, wn8: undefined, wnx: undefined };
       return {
         ...b,
+        tankType: vehicle?.type,
+        tankIsPremium: vehicle?.is_premium,
         wn8: calculateWn8(single, exp),
         wnx: calculateWnx(
           { ...single, avg_damage_assisted_radio: b.assist },

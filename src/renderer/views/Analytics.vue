@@ -240,7 +240,18 @@ function sessionDuration(s: SessionSummary) {
 <template>
   <div class="flex-1 overflow-auto">
     <div class="max-w-5xl mx-auto px-6 py-6">
-      <h2 class="text-2xl font-bold text-fg mb-6">Analytics</h2>
+      <div class="flex items-center gap-3 mb-6">
+        <h2 class="text-2xl font-bold text-fg">Analytics</h2>
+        <div class="group relative flex items-center">
+          <svg class="w-4 h-4 text-faint hover:text-muted cursor-default transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <div class="absolute left-6 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 bg-card border border-line rounded-lg px-3 py-2.5 shadow-xl">
+            <p class="text-xs text-fg font-medium mb-1">Completed battles only</p>
+            <p class="text-xs text-muted leading-relaxed">Stats include only battles you played to the end. Battles where you left to the garage early are recorded in Recent Battles as <span class="italic text-faint">abandoned</span> but excluded from all analytics to keep your numbers accurate.</p>
+          </div>
+        </div>
+      </div>
 
       <!-- Tabs -->
       <div class="flex gap-1 mb-6 bg-sub border border-line rounded-xl p-1">

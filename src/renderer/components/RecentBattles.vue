@@ -2,6 +2,30 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { getWn8Color } from '../../shared/utils/wn8';
+import iconLight from '../assets/light.png';
+import iconLightPremium from '../assets/light_premium.png';
+import iconMedium from '../assets/medium.png';
+import iconMediumPremium from '../assets/medium_premium.png';
+import iconHeavy from '../assets/heavy.png';
+import iconHeavyPremium from '../assets/heavy_premium.png';
+import iconTD from '../assets/tank_destroyer.png';
+import iconTDPremium from '../assets/tank_destroyer_premium.png';
+import iconSPG from '../assets/artyllery.png';
+
+const TANK_TYPE_ICONS: Record<string, { normal: string; premium?: string }> = {
+  lightTank:  { normal: iconLight,  premium: iconLightPremium },
+  mediumTank: { normal: iconMedium, premium: iconMediumPremium },
+  heavyTank:  { normal: iconHeavy,  premium: iconHeavyPremium },
+  'AT-SPG':   { normal: iconTD,     premium: iconTDPremium },
+  SPG:        { normal: iconSPG },
+};
+
+function tankTypeIcon(b: BattleRecord): string | null {
+  if (!b.tankType) return null;
+  const icons = TANK_TYPE_ICONS[b.tankType];
+  if (!icons) return null;
+  return (b.tankIsPremium && icons.premium) ? icons.premium : icons.normal;
+}
 
 // Fallback local calculation used only when main process hasn't enriched the battle
 // (e.g. WN8 expected values not yet fetched or this is the first scan)
@@ -141,22 +165,21 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
           <!-- Tank + context -->
           <div class="flex-1 min-w-0">
-            <div class="flex items-baseline gap-2 flex-wrap">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <img v-if="tankTypeIcon(b)" :src="tankTypeIcon(b)!" class="w-6 h-6 object-contain flex-shrink-0" />
               <span class="text-sm font-semibold text-fg">{{ b.tankName }}</span>
               <span v-if="b.markOfMastery > 0"
                 class="text-xs font-bold px-1.5 py-0.5 rounded"
                 :style="{ color: masteryColor(b.markOfMastery), backgroundColor: masteryColor(b.markOfMastery) + '22' }"
               >{{ masteryLabel(b.markOfMastery) }}</span>
-              <span v-if="b.achievements.length > 0" class="text-xs text-yellow-500/70">
-                🏅 {{ b.achievements.length }}
-              </span>
+              <span v-if="b.result === 'win'"  class="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-500/15 text-green-400">WIN</span>
+              <span v-if="b.result === 'loss'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">LOSS</span>
+              <span v-if="b.result === 'draw'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sub text-muted">DRAW</span>
             </div>
             <div class="flex items-baseline gap-2 mt-0.5 flex-wrap">
-              <span class="text-xs text-muted">{{ b.mapName }}</span>
-              <span class="text-xs text-faint">·</span>
-              <span class="text-xs text-muted">{{ b.battleType }}</span>
+              <span class="text-sm text-muted">{{ b.mapName }}</span>
             </div>
-            <div class="flex items-center gap-3 mt-1 text-xs text-muted">
+            <div class="flex items-center gap-3 mt-1 text-sm text-muted">
               <span>{{ formatTime(b.playedAt) }}</span>
               <span v-if="b.result !== 'incomplete'">{{ formatDuration(b.duration) }}</span>
               <span v-if="b.result === 'incomplete'" class="text-faint italic">abandoned</span>
@@ -192,9 +215,15 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
             </div>
 
             <!-- Assist -->
-            <div v-if="b.assist > 0" class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
+            <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
               <p class="text-xs text-muted mb-0.5">Assist</p>
               <p class="text-sm font-bold text-muted">{{ b.assist.toLocaleString('en-US') }}</p>
+            </div>
+
+            <!-- Blocked -->
+            <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
+              <p class="text-xs text-muted mb-0.5">Blocked</p>
+              <p class="text-sm font-bold text-muted">{{ b.damageBlocked.toLocaleString('en-US') }}</p>
             </div>
 
             <!-- Frags -->

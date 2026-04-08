@@ -19,6 +19,8 @@ export interface BattleRecord {
   playedAt: number;
   tankKey: string;
   tankName: string;
+  tankType?: string;
+  tankIsPremium?: boolean;
   /** Pre-computed by the main process using proper WN8 formula + XVM expected values. */
   wn8?: number;
   wnx?: number;

@@ -4,6 +4,15 @@ import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
 import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
+import iconLight from '../assets/light.png';
+import iconLightPremium from '../assets/light_premium.png';
+import iconMedium from '../assets/medium.png';
+import iconMediumPremium from '../assets/medium_premium.png';
+import iconHeavy from '../assets/heavy.png';
+import iconHeavyPremium from '../assets/heavy_premium.png';
+import iconTD from '../assets/tank_destroyer.png';
+import iconTDPremium from '../assets/tank_destroyer_premium.png';
+import iconSPG from '../assets/artyllery.png';
 
 const playerStore = usePlayerStore();
 const tanksStore = useTanksStore();
@@ -21,6 +30,23 @@ const typeLabels: Record<string, string> = {
   'heavyTank': 'Heavy', 'mediumTank': 'Medium', 'lightTank': 'Light',
   'AT-SPG': 'Tank Destroyer', 'SPG': 'Artillery',
 };
+const TANK_TYPE_ICONS: Record<string, { normal: string; premium?: string }> = {
+  lightTank:  { normal: iconLight,  premium: iconLightPremium },
+  mediumTank: { normal: iconMedium, premium: iconMediumPremium },
+  heavyTank:  { normal: iconHeavy,  premium: iconHeavyPremium },
+  'AT-SPG':   { normal: iconTD,     premium: iconTDPremium },
+  SPG:        { normal: iconSPG },
+};
+const NATION_FLAGS: Record<string, string> = {
+  france: '🇫🇷', germany: '🇩🇪', usa: '🇺🇸', ussr: '🇷🇺', uk: '🇬🇧',
+  japan: '🇯🇵', china: '🇨🇳', czech: '🇨🇿', sweden: '🇸🇪', poland: '🇵🇱',
+  italy: '🇮🇹', netherlands: '🇳🇱', pan_america: '🌎',
+};
+function tankTypeIcon(type: string, isPremium: boolean): string {
+  const icons = TANK_TYPE_ICONS[type];
+  if (!icons) return '';
+  return (isPremium && icons.premium) ? icons.premium : icons.normal;
+}
 
 // Weighted player averages across all tanks
 const playerAvgWr = computed(() => {
@@ -178,14 +204,12 @@ onMounted(async () => {
                 :class="['border-t border-line hover:bg-sub cursor-pointer transition-colors', i % 2 === 0 ? '' : 'bg-sub/50']"
               >
                 <td class="px-5 py-3">
-                  <div class="flex items-center gap-2">
-                    <div v-if="tank.isPremium" class="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0"></div>
-                    <div>
-                      <div class="text-sm font-medium text-fg">{{ tank.name }}</div>
-                      <div class="text-xs text-faint">Tier {{ tank.tier }} • {{ typeLabels[tank.type] || tank.type }}</div>
-                    </div>
-                  </div>
-                </td>
+                  <div class="flex items-center gap-1.5 text-sm font-medium text-fg">
+                    <img :src="tankTypeIcon(tank.type, tank.isPremium)" class="w-6 h-6 object-contain flex-shrink-0" />
+                    {{ tank.name }}
+                    <span class="text-sm leading-none">{{ NATION_FLAGS[tank.nation] ?? tank.nation }}</span>
+                </div>
+              </td>
                 <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.battles.toLocaleString('en-US') }}</td>
                 <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(tank.winRate) }">
                   {{ tank.winRate.toFixed(1) }}%
@@ -232,12 +256,10 @@ onMounted(async () => {
               class="border-t border-line hover:bg-sub cursor-pointer transition-colors"
             >
               <td class="px-5 py-3">
-                <div class="flex items-center gap-2">
-                  <div v-if="tank.isPremium" class="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0"></div>
-                  <div>
-                    <div class="text-sm font-medium text-fg">{{ tank.name }}</div>
-                    <div class="text-xs text-faint">Tier {{ tank.tier }} • {{ typeLabels[tank.type] || tank.type }} • {{ tank.nation }}</div>
-                  </div>
+                <div class="flex items-center gap-1.5 text-sm font-medium text-fg">
+                  <img :src="tankTypeIcon(tank.type, tank.isPremium)" class="w-6 h-6 object-contain flex-shrink-0" />
+                  {{ tank.name }}
+                  <span class="text-sm leading-none">{{ NATION_FLAGS[tank.nation] ?? tank.nation }}</span>
                 </div>
               </td>
               <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.battles.toLocaleString('en-US') }}</td>
