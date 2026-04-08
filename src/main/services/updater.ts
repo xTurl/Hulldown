@@ -7,15 +7,23 @@ export interface UpdateInfo {
   downloadUrl: string | null;
 }
 
-const GITHUB_REPO = 'xTurl/Hulldown';
+const GITHUB_REPO = 'xTurl/Hulldown-releases';
 
 /**
  * Fetches the latest GitHub release and returns update info if a newer version is available.
  * Returns null when up to date, on network error, or when running in dev mode.
  */
 export function checkForUpdates(): Promise<UpdateInfo | null> {
-  // Skip update checks in dev
-  if (!app.isPackaged) return Promise.resolve(null);
+  // Skip update checks in dev (unless HULLDOWN_FAKE_UPDATE is set for local testing)
+  if (!app.isPackaged && !process.env.HULLDOWN_FAKE_UPDATE) return Promise.resolve(null);
+
+  if (process.env.HULLDOWN_FAKE_UPDATE) {
+    return Promise.resolve({
+      version: '999.0.0',
+      releaseUrl: 'https://github.com/xTurl/Hulldown-releases/releases',
+      downloadUrl: null,
+    });
+  }
 
   return new Promise((resolve) => {
     const req = https.get(
