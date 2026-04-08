@@ -237,20 +237,22 @@ export function getBattlesCount(accountId: number): number {
 
 export interface ReplayMapStat {
   mapName: string; battles: number; wins: number; winRate: number;
-  avgDamage: number; avgKills: number; avgAssist: number;
+  avgDamage: number; avgKills: number; avgAssist: number; avgSpotted: number;
 }
 
-export function getReplayMapStats(accountId: number): ReplayMapStat[] {
+export function getReplayMapStats(accountId: number, sinceMs: number): ReplayMapStat[] {
+  const cutoff = sinceMs > 0 ? Date.now() - sinceMs : 0;
   return getDb().prepare(`
     SELECT map_name as mapName, COUNT(*) as battles,
            SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
            ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
            ROUND(AVG(damage), 0) as avgDamage,
            ROUND(AVG(kills), 2) as avgKills,
-           ROUND(AVG(assist), 0) as avgAssist
-    FROM battles WHERE account_id = ?
+           ROUND(AVG(assist), 0) as avgAssist,
+           ROUND(AVG(spotted), 2) as avgSpotted
+    FROM battles WHERE account_id = ? AND (? = 0 OR played_at >= ?)
     GROUP BY map_name ORDER BY battles DESC
-  `).all(accountId) as ReplayMapStat[];
+  `).all(accountId, cutoff, cutoff) as ReplayMapStat[];
 }
 
 export interface ReplayTankStat {

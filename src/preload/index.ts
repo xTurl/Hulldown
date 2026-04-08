@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('api', {
 
   getBattles: (limit?: number, offset?: number): Promise<BattleRecord[]> => ipcRenderer.invoke('replays:list', limit, offset),
   getBattlesCount: (): Promise<number> => ipcRenderer.invoke('replays:count'),
-  getMapStats: (): Promise<import('../main/services/cache').ReplayMapStat[]> => ipcRenderer.invoke('replays:map-stats'),
+  getMapStats: (sinceMs?: number): Promise<import('../main/services/cache').ReplayMapStat[]> => ipcRenderer.invoke('replays:map-stats', sinceMs),
   getTankRecentStats: (sinceMs?: number): Promise<import('../main/services/cache').ReplayTankStat[]> => ipcRenderer.invoke('replays:tank-stats', sinceMs),
   getEconomy: (days?: number): Promise<import('../main/services/cache').EconomyDay[]> => ipcRenderer.invoke('replays:economy', days),
   getSessions: (limit?: number): Promise<import('../main/services/cache').SessionSummary[]> => ipcRenderer.invoke('replays:sessions', limit),

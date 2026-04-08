@@ -426,9 +426,9 @@ export function registerHandlers(): void {
     return cacheService.getBattlesCount(config.accountId);
   });
 
-  handle('replays:map-stats', () => {
+  handle('replays:map-stats', (sinceMs) => {
     const config = configService.getConfig();
-    return cacheService.getReplayMapStats(config.accountId);
+    return cacheService.getReplayMapStats(config.accountId, assertOptionalNumber(sinceMs, 'sinceMs', 0));
   });
 
   handle('replays:tank-stats', (sinceMs) => {

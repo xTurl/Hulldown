@@ -137,6 +137,16 @@ watch(economyDays, loadEconomy);
 const mapData = ref<ReplayMapStat[]>([]);
 const mapLoading = ref(false);
 const mapSort = ref<'battles' | 'winRate' | 'avgDamage'>('battles');
+const mapPeriod = ref<number>(30 * 86400000); // ms, default 30 days
+
+const MAP_PERIODS = [
+  { label: '1 day',   ms: 1  * 86400000 },
+  { label: '7 days',  ms: 7  * 86400000 },
+  { label: '14 days', ms: 14 * 86400000 },
+  { label: '30 days', ms: 30 * 86400000 },
+  { label: '90 days', ms: 90 * 86400000 },
+  { label: 'All time', ms: 0 },
+];
 
 const sortedMaps = computed(() =>
   [...mapData.value].sort((a, b) => b[mapSort.value] - a[mapSort.value])
@@ -144,9 +154,11 @@ const sortedMaps = computed(() =>
 
 async function loadMaps() {
   mapLoading.value = true;
-  mapData.value = await window.api.getMapStats();
+  mapData.value = await window.api.getMapStats(mapPeriod.value);
   mapLoading.value = false;
 }
+
+watch(mapPeriod, loadMaps);
 
 // ── Tanks ─────────────────────────────────────────────────────────────────────
 const tankData = ref<ReplayTankStat[]>([]);
@@ -318,6 +330,15 @@ function sessionDuration(s: SessionSummary) {
 
       <!-- ── MAPS ── -->
       <div v-if="activeTab === 'maps'">
+        <!-- Period selector -->
+        <div class="flex items-center gap-2 mb-5">
+          <span class="text-xs text-faint">Period:</span>
+          <button v-for="p in MAP_PERIODS" :key="p.ms"
+            @click="mapPeriod = p.ms"
+            :class="['px-3 py-1 text-xs rounded-lg transition-colors', mapPeriod === p.ms ? 'bg-gold-bg text-gold' : 'bg-sub text-muted hover:text-fg']"
+          >{{ p.label }}</button>
+        </div>
+
         <div v-if="mapLoading" class="py-16 text-center text-faint animate-pulse">Loading...</div>
         <div v-else-if="mapData.length" class="bg-card border border-line rounded-xl overflow-hidden">
           <!-- Sort controls -->
@@ -330,16 +351,17 @@ function sessionDuration(s: SessionSummary) {
             >{{ label }}</button>
           </div>
           <!-- Table header -->
-          <div class="grid grid-cols-6 gap-2 px-5 py-2 text-xs text-faint border-b border-line">
+          <div class="grid grid-cols-7 gap-2 px-5 py-2 text-xs text-faint border-b border-line">
             <span class="col-span-2">Map</span>
             <span class="text-right">Battles</span>
             <span class="text-right">Win rate</span>
             <span class="text-right">Avg damage</span>
             <span class="text-right">Avg frags</span>
+            <span class="text-right">Avg spotted</span>
           </div>
           <div class="divide-y divide-line">
             <div v-for="m in sortedMaps" :key="m.mapName"
-              class="grid grid-cols-6 gap-2 px-5 py-3 items-center hover:bg-sub transition-colors"
+              class="grid grid-cols-7 gap-2 px-5 py-3 items-center hover:bg-sub transition-colors"
             >
               <span class="col-span-2 text-sm font-medium text-fg">{{ m.mapName }}</span>
               <span class="text-sm text-muted text-right">{{ m.battles }}</span>
@@ -348,6 +370,7 @@ function sessionDuration(s: SessionSummary) {
               </span>
               <span class="text-sm text-muted text-right">{{ m.avgDamage.toLocaleString('en-US') }}</span>
               <span class="text-sm text-muted text-right">{{ m.avgKills.toFixed(2) }}</span>
+              <span class="text-sm text-muted text-right">{{ m.avgSpotted.toFixed(2) }}</span>
             </div>
           </div>
         </div>
