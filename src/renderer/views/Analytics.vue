@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../../main/services/cache';
-import { getWn8Color } from '../../shared/utils/wn8';
+import { getWn8Color, calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { BarChart, LineChart } from 'echarts/charts';
@@ -235,6 +235,24 @@ function sessionDuration(s: SessionSummary) {
   const m = Math.floor((ms % 3600000) / 60000);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
+
+function sessionWn8(s: SessionSummary): number {
+  return calculateWn8({
+    battles: s.battles, wins: s.wins,
+    damage_dealt: s.totalDamage, frags: s.totalFrags,
+    spotted: s.totalSpotted, dropped_capture_points: s.totalDropped,
+  });
+}
+
+function sessionWnx(s: SessionSummary): number {
+  const avgAssist = s.battles > 0 ? s.totalAssist / s.battles : 0;
+  return calculateWnx({
+    battles: s.battles, wins: s.wins,
+    damage_dealt: s.totalDamage, frags: s.totalFrags,
+    spotted: s.totalSpotted, dropped_capture_points: s.totalDropped,
+    avg_damage_assisted_radio: avgAssist,
+  });
+}
 </script>
 
 <template>
@@ -457,13 +475,21 @@ function sessionDuration(s: SessionSummary) {
                 <p class="text-xs text-faint">net credits</p>
               </div>
             </div>
-            <div class="grid grid-cols-4 gap-3">
+            <div class="grid grid-cols-3 sm:grid-cols-6 gap-3">
               <div class="bg-sub rounded-lg px-3 py-2 text-center">
                 <p class="text-xs text-faint">Win rate</p>
                 <p class="text-base font-bold mt-0.5" :style="{ color: wrColor(s.winRate) }">
                   {{ s.winRate.toFixed(1) }}%
                 </p>
                 <p class="text-xs text-faint">{{ s.wins }}W / {{ s.battles - s.wins }}L</p>
+              </div>
+              <div class="bg-sub rounded-lg px-3 py-2 text-center">
+                <p class="text-xs text-faint">WN8</p>
+                <p class="text-base font-bold mt-0.5" :style="{ color: getWn8Color(sessionWn8(s)) }">{{ sessionWn8(s) || '—' }}</p>
+              </div>
+              <div class="bg-sub rounded-lg px-3 py-2 text-center">
+                <p class="text-xs text-faint">WNX</p>
+                <p class="text-base font-bold mt-0.5" :style="{ color: getWn8Color(sessionWnx(s)) }">{{ sessionWnx(s) || '—' }}</p>
               </div>
               <div class="bg-sub rounded-lg px-3 py-2 text-center">
                 <p class="text-xs text-faint">Avg damage</p>

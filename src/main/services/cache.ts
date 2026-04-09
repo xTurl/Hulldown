@@ -301,6 +301,8 @@ export interface SessionSummary {
   sessionNum: number; startedAt: number; endedAt: number;
   battles: number; wins: number; winRate: number;
   avgDamage: number; avgKills: number; netCredits: number;
+  totalDamage: number; totalFrags: number; totalSpotted: number;
+  totalDropped: number; totalAssist: number;
 }
 
 export interface ReplayTankContext {
@@ -323,7 +325,7 @@ export interface TodaySession {
   avgDamage: number; avgAssist: number; avgFrags: number; avgSpots: number;
   survivalRate: number; tankCount: number;
   totalDamage: number; totalWins: number; totalFrags: number;
-  totalSpotted: number; totalDropped: number;
+  totalSpotted: number; totalDropped: number; totalNetCredits: number;
 }
 
 export function getTodaySession(accountId: number): TodaySession | null {
@@ -340,7 +342,8 @@ export function getTodaySession(accountId: number): TodaySession | null {
            ROUND(AVG(CASE WHEN survived=1 THEN 100.0 ELSE 0 END), 1) as survivalRate,
            COUNT(DISTINCT tank_key) as tankCount,
            SUM(damage) as totalDamage, SUM(kills) as totalFrags,
-           SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped
+           SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped,
+           SUM(net_credits) as totalNetCredits
     FROM battles WHERE account_id = ? AND result != 'incomplete' AND played_at >= ?
   `).get(accountId, midnight.getTime()) as TodaySession & { battles: number } | undefined;
   if (!row || row.battles === 0) return null;
@@ -400,6 +403,7 @@ export function getSessions(accountId: number, limit = 20): SessionSummary[] {
   return getDb().prepare(`
     WITH ordered AS (
       SELECT played_at, result, damage, kills, net_credits,
+             spotted, dropped_capture, assist,
              LAG(played_at) OVER (ORDER BY played_at) as prev_at
       FROM battles WHERE account_id = ? AND result != 'incomplete'
     ),
@@ -416,7 +420,10 @@ export function getSessions(accountId: number, limit = 20): SessionSummary[] {
            ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
            ROUND(AVG(damage), 0) as avgDamage,
            ROUND(AVG(kills), 2) as avgKills,
-           SUM(net_credits) as netCredits
+           SUM(net_credits) as netCredits,
+           SUM(damage) as totalDamage, SUM(kills) as totalFrags,
+           SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped,
+           SUM(assist) as totalAssist
     FROM with_session
     GROUP BY session_num ORDER BY session_num DESC LIMIT ?
   `).all(accountId, limit) as SessionSummary[];

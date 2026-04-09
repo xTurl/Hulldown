@@ -161,10 +161,10 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
         :key="b.id"
         :class="['px-5 py-4 transition-colors', rowBg(b.result)]"
       >
-        <div class="flex items-start gap-4">
+        <div class="flex items-start gap-4 flex-wrap">
 
           <!-- Tank + context -->
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-[200px]">
             <div class="flex items-center gap-1.5 flex-wrap">
               <img v-if="tankTypeIcon(b)" :src="tankTypeIcon(b)!" class="w-6 h-6 object-contain flex-shrink-0" />
               <span class="text-sm font-semibold text-fg">{{ b.tankName }}</span>
@@ -188,7 +188,7 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
           </div>
 
           <!-- Stats grid -->
-          <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+          <div class="flex items-center gap-1 flex-wrap justify-end">
 
             <!-- WN8 -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">

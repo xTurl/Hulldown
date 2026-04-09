@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, useTemplateRef } from 'vue';
-import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
 import StatCard from '../components/StatCard.vue';
@@ -18,7 +17,6 @@ use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent
 
 const playerStore = usePlayerStore();
 const tanksStore = useTanksStore();
-const router = useRouter();
 const syncing = ref(false);
 const progress = ref<ProgressSnapshot[]>([]);
 const recentBattlesRef = useTemplateRef<{ scan: () => Promise<void> }>('recentBattles');
@@ -28,8 +26,6 @@ const winRate = computed(() => {
   const s = playerStore.playerInfo.statistics;
   return s.battles > 0 ? ((s.wins / s.battles) * 100).toFixed(1) + '%' : '0%';
 });
-
-const top5Tanks = computed(() => tanksStore.tankList.slice(0, 5));
 
 function weightedAvgFromTanks(getValue: (t: typeof tanksStore.tankList[number]) => number): number {
   if (tanksStore.tankList.length === 0) return 0;
@@ -161,7 +157,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="p-6 max-w-6xl mx-auto w-full">
+  <div class="p-6 w-full">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
@@ -184,82 +180,45 @@ onMounted(async () => {
       {{ playerStore.error || tanksStore.error }}
     </div>
 
-    <!-- Stat cards -->
-    <div v-if="playerStore.playerInfo" class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-      <StatCard title="Total battles" :value="playerStore.playerInfo.statistics.battles.toLocaleString('en-US')" subtitle="all tanks" />
-      <StatCard title="Win Rate" :value="winRate" :color="getWrColor(parseFloat(winRate))" />
-      <StatCard title="WN8" :value="overallWn8" :color="getWn8Color(overallWn8)" />
-      <StatCard title="WNX" :value="overallWnx" :color="getWn8Color(overallWnx)" subtitle="with assist" />
-      <StatCard title="Tanks in garage" :value="tanksStore.tankList.length" subtitle="with battles" />
-    </div>
-    <div v-else-if="playerStore.loading" class="grid grid-cols-5 gap-4 mb-6">
-      <div v-for="i in 5" :key="i" class="bg-card border border-line rounded-xl p-4 animate-pulse">
-        <div class="h-3 bg-sub rounded w-1/2 mb-2"></div>
-        <div class="h-8 bg-sub rounded w-3/4"></div>
-      </div>
-    </div>
+    <!-- Main grid: [left stats + session] [right recent battles] -->
+    <div class="grid gap-6 mb-6 items-start" style="grid-template-columns: minmax(0, 2fr) minmax(0, 3fr)">
+      <!-- Left column -->
+      <div class="flex flex-col gap-4 min-w-0">
+        <!-- 2x2 stat tiles -->
+        <div v-if="playerStore.playerInfo" class="grid grid-cols-2 gap-3">
+          <StatCard title="Total battles" :value="playerStore.playerInfo.statistics.battles.toLocaleString('en-US')" subtitle="all tanks" />
+          <StatCard title="Win Rate" :value="winRate" :color="getWrColor(parseFloat(winRate))" />
+          <StatCard title="WN8" :value="overallWn8" :color="getWn8Color(overallWn8)" />
+          <StatCard title="WNX" :value="overallWnx" :color="getWn8Color(overallWnx)" subtitle="with assist" />
+        </div>
+        <div v-else-if="playerStore.loading" class="grid grid-cols-2 gap-3">
+          <div v-for="i in 4" :key="i" class="bg-card border border-line rounded-xl p-4 animate-pulse">
+            <div class="h-3 bg-sub rounded w-1/2 mb-2"></div>
+            <div class="h-8 bg-sub rounded w-3/4"></div>
+          </div>
+        </div>
 
-    <!-- Session card -->
-    <SessionCard :snapshots="progress" :current-wnx="overallWnx" :syncing="syncing" />
-    <RecentBattles ref="recentBattles" />
+        <!-- Session card -->
+        <SessionCard :snapshots="progress" :current-wnx="overallWnx" :syncing="syncing" />
 
-    <!-- Progress chart -->
-    <div class="bg-card border border-line rounded-xl mb-6" style="box-shadow: 0 4px 20px rgba(0,0,0,0.25)">
-      <div class="px-5 py-4 border-b border-line flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-fg">Progress over time</h3>
-        <span class="text-xs text-faint">{{ progress.length }} sync{{ progress.length !== 1 ? 's' : '' }} recorded</span>
+        <!-- Progress chart -->
+        <div class="bg-card border border-line rounded-xl" style="box-shadow: 0 4px 20px rgba(0,0,0,0.25)">
+          <div class="px-5 py-4 border-b border-line flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-fg">Progress over time</h3>
+            <span class="text-xs text-faint">{{ progress.length }} sync{{ progress.length !== 1 ? 's' : '' }} recorded</span>
+          </div>
+          <div v-if="chartOption" class="px-2 py-3">
+            <VChart :option="chartOption" :autoresize="true" style="height: 200px" />
+          </div>
+          <div v-else class="px-5 py-8 text-center">
+            <p class="text-sm text-muted">No progress data yet</p>
+            <p class="text-xs text-faint mt-1">Click "Sync" a few times after playing to see your progress chart.</p>
+          </div>
+        </div>
       </div>
-      <div v-if="chartOption" class="px-2 py-3">
-        <VChart :option="chartOption" :autoresize="true" style="height: 200px" />
-      </div>
-      <div v-else class="px-5 py-8 text-center">
-        <p class="text-sm text-muted">No progress data yet</p>
-        <p class="text-xs text-faint mt-1">Click "Sync" a few times after playing to see your progress chart.</p>
-      </div>
-    </div>
 
-    <!-- Top tanks -->
-    <div class="bg-card border border-line rounded-xl" style="box-shadow: 0 4px 20px rgba(0,0,0,0.25)">
-      <div class="px-5 py-4 border-b border-line flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-fg">Top tanks (by battles)</h3>
-        <button @click="router.push('/tanks')" class="text-xs text-gold hover:text-gold-dim transition-colors">
-          Show all →
-        </button>
-      </div>
-      <div v-if="tanksStore.loading" class="p-5 text-sm text-muted">Loading...</div>
-      <div v-else-if="top5Tanks.length === 0" class="p-5 text-sm text-muted">
-        Click "Sync" to fetch tank data.
-      </div>
-      <table v-else class="w-full">
-        <thead>
-          <tr class="text-[11px] text-muted uppercase tracking-wide">
-            <th class="px-5 py-3 text-left font-medium">Tank</th>
-            <th class="px-4 py-3 text-right font-medium">Battles</th>
-            <th class="px-4 py-3 text-right font-medium">WR%</th>
-            <th class="px-4 py-3 text-right font-medium">WN8</th>
-            <th class="px-4 py-3 text-right font-medium">WNX</th>
-            <th class="px-4 py-3 text-right font-medium">Avg DMG</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="tank in top5Tanks"
-            :key="tank.tankId"
-            @click="router.push(`/tanks/${tank.tankId}`)"
-            class="border-t border-line hover:bg-sub cursor-pointer transition-colors"
-          >
-            <td class="px-5 py-3">
-              <div class="text-sm font-medium text-fg">{{ tank.name }}</div>
-              <div class="text-xs text-faint mt-0.5">Tier {{ tank.tier }} · {{ tank.type }}</div>
-            </td>
-            <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.battles.toLocaleString('en-US') }}</td>
-            <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(tank.winRate) }">{{ tank.winRate.toFixed(1) }}%</td>
-            <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wn8) }">{{ tank.wn8 }}</td>
-            <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wnx) }">{{ tank.wnx }}</td>
-            <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.avgDamage.toLocaleString('en-US') }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- Right column: Recent Battles -->
+      <RecentBattles ref="recentBattles" />
     </div>
   </div>
 </template>
