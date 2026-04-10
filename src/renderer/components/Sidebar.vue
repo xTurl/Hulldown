@@ -101,14 +101,64 @@ async function switchPlayer(player: DetectedPlayer) {
     showPlayerDropdown.value = false;
     return;
   }
-  const config = await window.api.getConfig();
-  await window.api.saveConfig({
-    ...config,
-    accountId: player.accountId,
-    username: player.playerName,
-    region: player.region,
-  });
-  window.location.reload();
+
+  let accountId = player.accountId;
+
+  // If accountId is null (old replay format without playerID), look it up from WG API
+  if (accountId === null) {
+    try {
+      console.log('[SwitchPlayer] Looking up account ID for:', player.playerName, 'region:', player.region);
+
+      // Try the detected region first
+      let result = await window.api.searchPlayer(player.playerName, player.region);
+      console.log('[SwitchPlayer] Search results for region', player.region, ':', result);
+
+      // If no results, try all regions
+      if (!result || result.length === 0) {
+        console.log('[SwitchPlayer] No results in', player.region, 'trying other regions...');
+        for (const region of ['EU', 'NA', 'RU', 'ASIA']) {
+          if (region !== player.region) {
+            result = await window.api.searchPlayer(player.playerName, region);
+            console.log('[SwitchPlayer] Search results for region', region, ':', result);
+            if (result && result.length > 0) break;
+          }
+        }
+      }
+
+      if (result && result.length > 0) {
+        // Find exact match by name (case-insensitive)
+        const match = result.find((p: any) =>
+          p.nickname.toLowerCase() === player.playerName.toLowerCase()
+        ) || result[0];
+        accountId = match.account_id;
+        console.log('[SwitchPlayer] Found accountId:', accountId, 'for player:', match.nickname);
+      } else {
+        // Player not found on WG API
+        alert(`Could not find account ID for "${player.playerName}".\n\nMake sure the player name is correct, or check your internet connection.`);
+        return;
+      }
+    } catch (e) {
+      console.error('[SwitchPlayer] Error:', e);
+      alert(`Failed to look up account ID: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+  }
+
+  try {
+    const config = await window.api.getConfig();
+    console.log('[SwitchPlayer] Saving config with accountId:', accountId, 'username:', player.playerName);
+    await window.api.saveConfig({
+      ...config,
+      accountId,
+      username: player.playerName,
+      region: player.region,
+    });
+    console.log('[SwitchPlayer] Config saved, reloading...');
+    window.location.reload();
+  } catch (e) {
+    console.error('[SwitchPlayer] Failed to save config:', e);
+    alert(`Failed to save config: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 </script>
 

@@ -137,7 +137,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
 
 export interface DetectedPlayer {
   playerName: string;
-  accountId: number;
+  accountId: number | null;
   region: string;
 }
 
@@ -194,9 +194,10 @@ export function detectAllPlayersFromReplays(replayDir: string): DetectedPlayer[]
       .reverse();
   } catch { return []; }
 
-  const seen = new Map<number, DetectedPlayer>();
+  const seen = new Map<string, DetectedPlayer>();
 
-  for (const file of files.slice(0, 200)) {
+  // Scan all replay files to detect all unique players (not limited to 200)
+  for (const file of files) {
     let fd = -1;
     try {
       fd = fs.openSync(path.join(replayDir, file), 'r');
@@ -210,12 +211,18 @@ export function detectAllPlayersFromReplays(replayDir: string): DetectedPlayer[]
       fs.readSync(fd, buf0, 0, size0, 12);
       fs.closeSync(fd); fd = -1;
       const block0 = JSON.parse(buf0.toString('utf-8'));
-      if (block0.playerID && block0.playerName && block0.serverName) {
+
+      // playerID is optional; use it if available, otherwise use playerName+serverName
+      if (block0.playerName && block0.serverName) {
+        const uniqueKey = block0.playerID
+          ? String(block0.playerID as number)
+          : `${block0.playerName as string}|${block0.serverName as string}`;
+
         // Most recent file wins (files sorted newest-first); skip if already seen
-        if (!seen.has(block0.playerID as number)) {
-          seen.set(block0.playerID as number, {
+        if (!seen.has(uniqueKey)) {
+          seen.set(uniqueKey, {
             playerName: block0.playerName as string,
-            accountId:  block0.playerID as number,
+            accountId:  block0.playerID ? (block0.playerID as number) : null,
             region:     regionFromServer(block0.serverName as string),
           });
         }

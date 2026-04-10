@@ -220,6 +220,7 @@ export function registerHandlers(): void {
 
   handle('config:save', (config) => {
     clearMemCache();
+    cacheService.clearPlayerInfoCache();
     configService.saveConfig(assertConfig(config));
   });
 

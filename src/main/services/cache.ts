@@ -135,6 +135,10 @@ export function savePlayerInfo(data: unknown): void {
   getDb().prepare('INSERT OR REPLACE INTO player_info (id, data, updated_at) VALUES (1, ?, ?)').run(JSON.stringify(data), Date.now());
 }
 
+export function clearPlayerInfoCache(): void {
+  getDb().prepare('DELETE FROM player_info').run();
+}
+
 export function clearAll(): void {
   getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots;');
 }

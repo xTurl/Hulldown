@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.8.1
+
+**New Features**
+
+- **Automatic Account ID Lookup** — When switching to players whose replay files use the old format (missing playerID field), Hulldown now automatically looks up their account ID from the Wargaming API using their player name. Includes intelligent region fallback (tries detected region first, then EU, NA, RU, ASIA) to find the right account.
+
+**Improvements**
+
+- **Extended Replay File Scanning** — Removed 200-file limit on replay scanning. Hulldown now scans all replay files in your folder, ensuring all unique players with replays are detected—including older replay files. No more missed players from large collections.
+- **Smarter Player Switching** — Player switching logic now handles edge cases like null account IDs and provides detailed error messages when API lookups fail. Console logging added for easier debugging.
+- **Player Cache Invalidation** — Player data is now cleared from cache when switching players, ensuring fresh stats are fetched from the WG API instead of showing stale data from the previous player.
+
+**Technical**
+
+- Added `clearPlayerInfoCache()` function in cache service
+- Updated `config:save` handler to clear player info cache
+- Enhanced `detectAllPlayersFromReplays()` to scan unlimited replay files
+- Improved `switchPlayer()` in Sidebar.vue with WG API fallback and error handling
+
+**Files Modified**
+
+- `src/main/services/replay-parser.ts` — Unlimited replay scanning
+- `src/main/services/cache.ts` — Added clearPlayerInfoCache()
+- `src/main/ipc/handlers.ts` — Call clearPlayerInfoCache() on config save
+- `src/renderer/components/Sidebar.vue` — Smart player switching with API lookup
+
+---
+
 ## v1.8.0
 
 **New Features**
