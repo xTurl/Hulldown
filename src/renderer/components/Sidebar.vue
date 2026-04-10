@@ -3,7 +3,8 @@ import { useRouter, useRoute } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useThemeStore } from '../stores/theme';
 import { getWn8Color } from '../../shared/utils/wn8';
-import { computed } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
+import type { DetectedPlayer } from '../../main/services/replay-parser';
 
 const router = useRouter();
 const route = useRoute();
@@ -42,6 +43,12 @@ const navItems = [
     icon: '<rect x="3" y="4" width="18" height="17" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/><line x1="7" y1="17" x2="11" y2="17"/>',
   },
   {
+    path: '/patches',
+    label: 'Updates',
+    // Download cloud / arrow down into box
+    icon: '<polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0018 9h-1.26A8 8 0 103 16.29"/>',
+  },
+  {
     path: '/tutorials',
     label: 'Guides',
     // Open book
@@ -65,12 +72,50 @@ const winRate = computed(() => {
 });
 
 const collapsed = computed(() => themeStore.sidebarCollapsed);
+
+const detectedPlayers = ref<DetectedPlayer[]>([]);
+const showPlayerDropdown = ref(false);
+const playerAreaRef = ref<HTMLElement | null>(null);
+
+const hasMultiplePlayers = computed(() => detectedPlayers.value.length > 1);
+
+function handleOutsideClick(e: MouseEvent) {
+  if (playerAreaRef.value && !playerAreaRef.value.contains(e.target as Node)) {
+    showPlayerDropdown.value = false;
+  }
+}
+
+onMounted(async () => {
+  document.addEventListener('click', handleOutsideClick);
+  try {
+    detectedPlayers.value = await window.api.detectAllPlayers();
+  } catch { /* ignore — no replays dir configured */ }
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleOutsideClick);
+});
+
+async function switchPlayer(player: DetectedPlayer) {
+  if (player.accountId === playerStore.playerInfo?.accountId) {
+    showPlayerDropdown.value = false;
+    return;
+  }
+  const config = await window.api.getConfig();
+  await window.api.saveConfig({
+    ...config,
+    accountId: player.accountId,
+    username: player.playerName,
+    region: player.region,
+  });
+  window.location.reload();
+}
 </script>
 
 <template>
   <nav
     :class="[
-      'flex-shrink-0 flex flex-col border-r border-line bg-card transition-[width] duration-200 ease-in-out overflow-hidden',
+      'flex-shrink-0 flex flex-col border-r border-line bg-card transition-[width] duration-200 ease-in-out overflow-visible',
       collapsed ? 'w-16' : 'w-60',
     ]"
     style="box-shadow: 2px 0 20px rgba(0,0,0,0.25)"
@@ -153,41 +198,104 @@ const collapsed = computed(() => themeStore.sidebarCollapsed);
 
     <!-- Player info -->
     <div class="border-t border-line shrink-0">
-      <div
-        v-if="playerStore.playerInfo"
-        :class="['py-3', collapsed ? 'flex justify-center px-0' : 'px-3']"
-      >
-        <div :class="['flex items-center', collapsed ? '' : 'gap-3']">
-          <!-- Avatar -->
-          <div
-            class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-            :style="{
-              backgroundColor: wn8Color + '22',
-              color: wn8Color,
-              border: `1px solid ${wn8Color}44`,
-            }"
-          >
-            {{ playerStore.playerInfo.username.charAt(0).toUpperCase() }}
-          </div>
-          <!-- Info -->
-          <div v-if="!collapsed" class="min-w-0">
-            <p class="text-sm font-medium text-fg truncate leading-tight">
-              {{ playerStore.playerInfo.username }}
-            </p>
-            <div class="flex items-center gap-2 mt-1">
-              <span
-                class="text-xs font-semibold px-1.5 py-0.5 rounded"
-                :style="{ backgroundColor: wn8Color + '22', color: wn8Color }"
-              >
-                {{ playerStore.playerInfo.wn8 }}
-              </span>
-              <span class="text-xs text-muted">{{ winRate }}% WR</span>
+      <!-- Player area with optional dropdown -->
+      <div ref="playerAreaRef" class="relative">
+        <div
+          v-if="playerStore.playerInfo"
+          :class="[
+            'py-3 transition-colors',
+            collapsed ? 'flex justify-center px-0' : 'px-3',
+            hasMultiplePlayers && !collapsed ? 'cursor-pointer hover:bg-sub rounded-lg mx-1' : '',
+          ]"
+          @click="!collapsed && hasMultiplePlayers ? (showPlayerDropdown = !showPlayerDropdown) : undefined"
+        >
+          <div :class="['flex items-center', collapsed ? '' : 'gap-3']">
+            <!-- Avatar -->
+            <div
+              class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+              :style="{
+                backgroundColor: wn8Color + '22',
+                color: wn8Color,
+                border: `1px solid ${wn8Color}44`,
+              }"
+            >
+              {{ playerStore.playerInfo.username.charAt(0).toUpperCase() }}
+            </div>
+            <!-- Info -->
+            <div v-if="!collapsed" class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <p class="text-sm font-medium text-fg truncate leading-tight">
+                  {{ playerStore.playerInfo.username }}
+                </p>
+                <!-- Chevron — visible when multiple players detected -->
+                <svg
+                  v-if="hasMultiplePlayers"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="w-3 h-3 text-faint shrink-0 transition-transform duration-150"
+                  :class="showPlayerDropdown ? 'rotate-180' : ''"
+                >
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div class="flex items-center gap-2 mt-1">
+                <span
+                  class="text-xs font-semibold px-1.5 py-0.5 rounded"
+                  :style="{ backgroundColor: wn8Color + '22', color: wn8Color }"
+                >
+                  {{ playerStore.playerInfo.wn8 }}
+                </span>
+                <span class="text-xs text-muted">{{ winRate }}% WR</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div v-else-if="!collapsed" class="px-4 py-3">
-        <p class="text-xs text-faint">Loading...</p>
+        <div v-else-if="!collapsed" class="px-4 py-3">
+          <p class="text-xs text-faint">Loading...</p>
+        </div>
+
+        <!-- Player switcher dropdown -->
+        <div
+          v-if="showPlayerDropdown && hasMultiplePlayers && !collapsed"
+          class="absolute bottom-full left-0 right-0 mb-1 bg-card border border-line rounded-xl shadow-xl overflow-hidden z-50"
+        >
+          <div class="px-3 py-2 border-b border-line">
+            <p class="text-xs text-faint">Switch player</p>
+          </div>
+          <button
+            v-for="p in detectedPlayers"
+            :key="p.accountId"
+            @click.stop="switchPlayer(p)"
+            class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-sub transition-colors text-left"
+          >
+            <div
+              class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+              :style="{ backgroundColor: 'var(--sub)', color: 'var(--muted)', border: '1px solid var(--line)' }"
+            >
+              {{ p.playerName.charAt(0).toUpperCase() }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-fg truncate">{{ p.playerName }}</p>
+              <p class="text-xs text-faint">{{ p.region }}</p>
+            </div>
+            <svg
+              v-if="p.accountId === playerStore.playerInfo?.accountId"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="w-4 h-4 text-gold shrink-0"
+            >
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <!-- Collapse toggle -->

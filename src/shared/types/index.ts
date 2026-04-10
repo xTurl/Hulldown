@@ -131,6 +131,16 @@ export interface NewsItem {
   valueLevel: 'high' | 'standard' | null;
 }
 
+export interface PatchItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  pubTimestamp: number;
+  description: string;
+  version: string | null;
+  patchType: 'update' | 'hotfix' | 'micropatch';
+}
+
 export interface ProgressSnapshot {
   id: number;
   takenAt: number;

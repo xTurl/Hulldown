@@ -176,7 +176,9 @@ onMounted(async () => {
     </div>
 
     <!-- Error -->
-    <div v-if="playerStore.error || tanksStore.error" class="mb-4 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+    <div v-if="playerStore.error || tanksStore.error"
+         class="mb-4 px-4 py-3 rounded-lg text-sm"
+         style="color: var(--error-fg); background: var(--error-bg); border: 1px solid var(--error-border)">
       {{ playerStore.error || tanksStore.error }}
     </div>
 

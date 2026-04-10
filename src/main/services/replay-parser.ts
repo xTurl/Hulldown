@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import type { BattleRecord } from '../../shared/types';
 
-export type ParsedBattle = Omit<BattleRecord, 'id' | 'accountId'>;
+export type ParsedBattle = Omit<BattleRecord, 'id' | 'accountId'> & {
+  playerAccountId?: number;
+};
 
 const BATTLE_TYPE_LABELS: Record<string, string> = {
   ctf:        'Standard',
@@ -50,6 +52,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
       const gameplayID: string = block0.gameplayID ?? 'ctf';
       fs.closeSync(fd); fd = -1;
       return {
+        playerAccountId: block0.playerID as number | undefined,
         arenaId:        `partial_${path.basename(filePath, '.wotreplay')}`,
         playedAt,
         tankKey:        block0.playerVehicle as string,
@@ -96,6 +99,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
     const gameplayID: string = block0.gameplayID ?? 'ctf';
 
     return {
+      playerAccountId: block0.playerID as number | undefined,
       arenaId:     String(result.arenaUniqueID),
       playedAt,
       tankKey:     block0.playerVehicle as string,
@@ -181,6 +185,48 @@ export function detectPlayerFromReplays(replayDir: string): DetectedPlayer | nul
   return null;
 }
 
+export function detectAllPlayersFromReplays(replayDir: string): DetectedPlayer[] {
+  let files: string[];
+  try {
+    files = fs.readdirSync(replayDir)
+      .filter(f => f.endsWith('.wotreplay') && f !== 'temp.wotreplay')
+      .sort()
+      .reverse();
+  } catch { return []; }
+
+  const seen = new Map<number, DetectedPlayer>();
+
+  for (const file of files.slice(0, 200)) {
+    let fd = -1;
+    try {
+      fd = fs.openSync(path.join(replayDir, file), 'r');
+      const header = Buffer.alloc(8);
+      fs.readSync(fd, header, 0, 8, 0);
+      if (header.readUInt32LE(4) < 1) { fs.closeSync(fd); fd = -1; continue; }
+      const sz0 = Buffer.alloc(4);
+      fs.readSync(fd, sz0, 0, 4, 8);
+      const size0 = sz0.readUInt32LE(0);
+      const buf0 = Buffer.alloc(size0);
+      fs.readSync(fd, buf0, 0, size0, 12);
+      fs.closeSync(fd); fd = -1;
+      const block0 = JSON.parse(buf0.toString('utf-8'));
+      if (block0.playerID && block0.playerName && block0.serverName) {
+        // Most recent file wins (files sorted newest-first); skip if already seen
+        if (!seen.has(block0.playerID as number)) {
+          seen.set(block0.playerID as number, {
+            playerName: block0.playerName as string,
+            accountId:  block0.playerID as number,
+            region:     regionFromServer(block0.serverName as string),
+          });
+        }
+      }
+    } catch { /* try next */ }
+    finally { if (fd >= 0) try { fs.closeSync(fd); } catch { /* ignore */ } }
+  }
+
+  return Array.from(seen.values());
+}
+
 export interface ScanResult {
   added: number;
   skipped: number;
@@ -210,8 +256,12 @@ export function scanReplays(
     if (!parsed) { result.errors++; continue; }
     if (knownArenaIds.has(parsed.arenaId)) { result.skipped++; continue; }
 
-    // Filter to current player only
-    // (replays directory is shared but we only want this account's battles)
+    // Filter to current player only — skip replays belonging to other players
+    if (parsed.playerAccountId !== undefined && parsed.playerAccountId !== accountId) {
+      result.skipped++;
+      continue;
+    }
+
     knownArenaIds.add(parsed.arenaId);
     batch.push({ ...parsed, accountId });
     result.added++;

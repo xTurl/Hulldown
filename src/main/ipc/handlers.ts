@@ -3,6 +3,7 @@ import * as configService from '../services/config';
 import * as cacheService from '../services/cache';
 import * as wgService from '../services/wargaming';
 import * as newsService from '../services/news';
+import * as patchesService from '../services/patches';
 import * as claudeService from '../services/claude';
 import * as replayParser from '../services/replay-parser';
 import * as updaterService from '../services/updater';
@@ -351,6 +352,11 @@ export function registerHandlers(): void {
     return newsService.fetchNews(config.region);
   });
 
+  handle('patches:fetch', () => {
+    const config = configService.getConfig();
+    return patchesService.fetchPatches(config.region);
+  });
+
   handle('session:today', () => {
     const config = configService.getConfig();
     return cacheService.getTodaySession(config.accountId);
@@ -360,6 +366,12 @@ export function registerHandlers(): void {
     const config = configService.getConfig();
     if (!config.replaysDir) return null;
     return replayParser.detectPlayerFromReplays(config.replaysDir);
+  });
+
+  handle('player:detect-all', () => {
+    const config = configService.getConfig();
+    if (!config.replaysDir) return [];
+    return replayParser.detectAllPlayersFromReplays(config.replaysDir);
   });
 
   handle('replays:tank-maps', (tankName) => {
@@ -423,6 +435,20 @@ export function registerHandlers(): void {
         ),
       };
     });
+  });
+
+  handle('replays:update-battle', (id, damage, assist, kills, result) => {
+    const config = configService.getConfig();
+    cacheService.updateBattleStats(
+      assertNumber(id, 'id'),
+      config.accountId,
+      {
+        damage: assertNumber(damage, 'damage'),
+        assist: assertNumber(assist, 'assist'),
+        kills:  assertNumber(kills, 'kills'),
+        result: assertString(result, 'result') as 'win' | 'loss' | 'draw',
+      },
+    );
   });
 
   handle('replays:count', () => {

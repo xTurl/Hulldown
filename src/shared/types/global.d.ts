@@ -20,6 +20,8 @@ declare global {
       scanReplays(): Promise<{ added: number; skipped: number; errors: number }>;
       getTodaySession(): Promise<TodaySession | null>;
       detectPlayer(): Promise<DetectedPlayer | null>;
+      detectAllPlayers(): Promise<DetectedPlayer[]>;
+      updateBattle(id: number, damage: number, assist: number, kills: number, result: 'win' | 'loss' | 'draw'): Promise<void>;
       getTankMapStats(tankName: string): Promise<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]>;
       getBattles(limit?: number, offset?: number): Promise<BattleRecord[]>;
       getBattlesCount(): Promise<number>;

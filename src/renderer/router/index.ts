@@ -4,6 +4,7 @@ import TankList from '../views/TankList.vue';
 import TankDetail from '../views/TankDetail.vue';
 import TankCompare from '../views/TankCompare.vue';
 import News from '../views/News.vue';
+import Patches from '../views/Patches.vue';
 import Tutorials from '../views/Tutorials.vue';
 import Settings from '../views/Settings.vue';
 import Analytics from '../views/Analytics.vue';
@@ -17,6 +18,7 @@ export const router = createRouter({
     { path: '/compare', component: TankCompare },
     { path: '/analytics', component: Analytics },
     { path: '/news', component: News },
+    { path: '/patches', component: Patches },
     { path: '/tutorials', component: Tutorials },
     { path: '/settings', component: Settings },
   ],

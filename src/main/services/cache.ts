@@ -429,6 +429,16 @@ export function getSessions(accountId: number, limit = 20): SessionSummary[] {
   `).all(accountId, limit) as SessionSummary[];
 }
 
+export function updateBattleStats(
+  id: number,
+  accountId: number,
+  data: { damage: number; assist: number; kills: number; result: 'win' | 'loss' | 'draw' },
+): void {
+  getDb()
+    .prepare('UPDATE battles SET damage = ?, assist = ?, kills = ?, result = ? WHERE id = ? AND account_id = ?')
+    .run(data.damage, data.assist, data.kills, data.result, id, accountId);
+}
+
 export function backfillMissingWnx(wnx: number): void {
   getDb()
     .prepare('UPDATE progress_snapshots SET wnx = ? WHERE wnx = 0')

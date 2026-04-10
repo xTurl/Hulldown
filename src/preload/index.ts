@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord, UpdateInfo } from '../shared/types';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo } from '../shared/types';
 
 contextBridge.exposeInMainWorld('api', {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
@@ -15,11 +15,15 @@ contextBridge.exposeInMainWorld('api', {
   getCacheStats: (): Promise<CacheStats> => ipcRenderer.invoke('cache:stats'),
   getProgress: (): Promise<ProgressSnapshot[]> => ipcRenderer.invoke('progress:list'),
   getNews: (): Promise<NewsItem[]> => ipcRenderer.invoke('news:fetch'),
+  getPatches: (): Promise<PatchItem[]> => ipcRenderer.invoke('patches:fetch'),
   getTodaySession: (): Promise<import('../main/services/cache').TodaySession | null> => ipcRenderer.invoke('session:today'),
   detectPlayer: (): Promise<import('../main/services/replay-parser').DetectedPlayer | null> => ipcRenderer.invoke('player:detect'),
+  detectAllPlayers: (): Promise<import('../main/services/replay-parser').DetectedPlayer[]> => ipcRenderer.invoke('player:detect-all'),
   getTankMapStats: (tankName: string): Promise<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]> => ipcRenderer.invoke('replays:tank-maps', tankName),
   clearBattles: (): Promise<void> => ipcRenderer.invoke('replays:clear'),
   scanReplays: (): Promise<{ added: number; skipped: number; errors: number }> => ipcRenderer.invoke('replays:scan'),
+  updateBattle: (id: number, damage: number, assist: number, kills: number, result: 'win' | 'loss' | 'draw'): Promise<void> =>
+    ipcRenderer.invoke('replays:update-battle', id, damage, assist, kills, result),
 
   getBattles: (limit?: number, offset?: number): Promise<BattleRecord[]> => ipcRenderer.invoke('replays:list', limit, offset),
   getBattlesCount: (): Promise<number> => ipcRenderer.invoke('replays:count'),

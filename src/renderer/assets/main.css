@@ -28,6 +28,9 @@
   --gold:       #c8a84b;
   --gold-dim:   #8a6f2e;
   --gold-bg:    rgba(200, 168, 75, 0.13);
+  --error-fg:     #fca5a5;
+  --error-bg:     rgba(127, 29, 29, 0.25);
+  --error-border: rgba(185, 28, 28, 0.5);
 }
 
 [data-theme="light"] {
@@ -43,6 +46,9 @@
   --gold:       #7a5f1e;
   --gold-dim:   #c8a84b;
   --gold-bg:    rgba(122, 95, 30, 0.10);
+  --error-fg:     #991b1b;
+  --error-bg:     rgba(254, 226, 226, 0.8);
+  --error-border: rgba(185, 28, 28, 0.35);
 }
 
 * {
