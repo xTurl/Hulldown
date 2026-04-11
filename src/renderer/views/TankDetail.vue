@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
+import { normalizeMapName } from '../../shared/utils/mapNames';
 import StatCard from '../components/StatCard.vue';
 import type { TankDetails, AppConfig } from '../../shared/types';
 
@@ -284,7 +285,7 @@ onMounted(loadTank);
             <tbody>
               <tr v-for="(map, i) in sortedMaps" :key="map.mapName"
                 :class="['border-t border-line', i % 2 === 0 ? '' : 'bg-sub/50']">
-                <td class="px-5 py-3 text-sm text-fg">{{ map.mapName }}</td>
+                <td class="px-5 py-3 text-sm text-fg">{{ normalizeMapName(map.mapName) }}</td>
                 <td class="px-4 py-3 text-right text-sm text-muted">{{ map.battles }}</td>
                 <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(map.winRate) }">{{ map.winRate.toFixed(1) }}%</td>
                 <td class="px-4 py-3 text-right text-sm text-muted">{{ map.avgDamage.toLocaleString('en-US') }}</td>

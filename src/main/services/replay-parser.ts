@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { BattleRecord } from '../../shared/types';
+import { normalizeMapName } from '../../shared/utils/mapNames';
 
 export type ParsedBattle = Omit<BattleRecord, 'id' | 'accountId'> & {
   playerAccountId?: number;
@@ -57,7 +58,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
         playedAt,
         tankKey:        block0.playerVehicle as string,
         tankName:       formatTankName(block0.playerVehicle as string),
-        mapName:        (block0.mapDisplayName as string) ?? '',
+        mapName:        normalizeMapName((block0.mapDisplayName as string) ?? ''),
         battleType:     BATTLE_TYPE_LABELS[gameplayID] ?? gameplayID,
         result:         'incomplete',
         damage: 0, assist: 0, kills: 0, shots: 0, hits: 0, pens: 0,
@@ -104,7 +105,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
       playedAt,
       tankKey:     block0.playerVehicle as string,
       tankName:    formatTankName(block0.playerVehicle as string),
-      mapName:     block0.mapDisplayName as string,
+      mapName:     normalizeMapName(block0.mapDisplayName as string),
       battleType:  BATTLE_TYPE_LABELS[gameplayID] ?? gameplayID,
       result:      battleResult,
       damage:      personal.damageDealt               ?? 0,

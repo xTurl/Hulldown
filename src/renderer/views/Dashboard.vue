@@ -137,8 +137,9 @@ const chartOption = computed(() => {
 
 async function sync() {
   syncing.value = true;
-  // Clear the in-memory WG API cache so we always get fresh data from the API.
-  await window.api.clearMemCache();
+  // Clear both in-memory WG API cache and the SQLite player_info cache so
+  // fetchPlayerInfo() always hits the WG API and returns fresh data.
+  await Promise.all([window.api.clearMemCache(), window.api.clearPlayerInfoCache()]);
   await Promise.all([
     tanksStore.fetchTankList(),
     recentBattlesRef.value?.scan(),

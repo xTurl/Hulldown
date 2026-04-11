@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { getWn8Color } from '../../shared/utils/wn8';
+import { normalizeMapName } from '../../shared/utils/mapNames';
 import iconLight from '../assets/light.png';
 import iconLightPremium from '../assets/light_premium.png';
 import iconMedium from '../assets/medium.png';
@@ -204,7 +205,7 @@ async function saveEdit(b: BattleRecord) {
               <span v-if="b.result === 'draw'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sub text-muted">DRAW</span>
             </div>
             <div class="flex items-baseline gap-2 mt-0.5 flex-wrap">
-              <span class="text-sm text-muted">{{ b.mapName }}</span>
+              <span class="text-sm text-muted">{{ normalizeMapName(b.mapName) }}</span>
             </div>
             <div class="flex items-center gap-3 mt-1 text-sm text-muted">
               <span>{{ formatTime(b.playedAt) }}</span>

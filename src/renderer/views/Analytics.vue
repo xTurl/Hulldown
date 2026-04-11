@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../../main/services/cache';
 import { getWn8Color, calculateWn8, calculateWnx } from '../../shared/utils/wn8';
+import { normalizeMapName } from '../../shared/utils/mapNames';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { BarChart, LineChart } from 'echarts/charts';
@@ -392,7 +393,7 @@ function sessionWnx(s: SessionSummary): number {
             <div v-for="m in sortedMaps" :key="m.mapName"
               class="grid grid-cols-7 gap-2 px-5 py-3 items-center hover:bg-sub transition-colors"
             >
-              <span class="col-span-2 text-sm font-medium text-fg">{{ m.mapName }}</span>
+              <span class="col-span-2 text-sm font-medium text-fg">{{ normalizeMapName(m.mapName) }}</span>
               <span class="text-sm text-muted text-right">{{ m.battles }}</span>
               <span class="text-sm font-semibold text-right" :style="{ color: wrColor(m.winRate) }">
                 {{ m.winRate.toFixed(1) }}%

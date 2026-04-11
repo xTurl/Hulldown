@@ -233,10 +233,17 @@ export function registerHandlers(): void {
     if (cached && Date.now() - cached.updatedAt < ONE_HOUR) return cached.data;
 
     const config = configService.getConfig();
-    const playerInfo = await wgService.getPlayerInfo(config.accountId, WG_API_KEY, config.region);
+    // Fetch all three data sources in parallel.
+    // Per-tank weighted average WN8 is always more accurate than the raw aggregate formula,
+    // so we ensure tank stats and XVM expected values are loaded even if tanks:list hasn't
+    // been called yet this session. Both are in-memory cached so after first call this is instant.
+    const [playerInfo, { tankStats }] = await Promise.all([
+      wgService.getPlayerInfo(config.accountId, WG_API_KEY, config.region),
+      getWgData(config),
+      getWn8Exp(),
+    ]);
     const stats = playerInfo.statistics.all;
-    // Use per-tank weighted average WN8 when tank stats are available (most accurate)
-    const overall = memTankStats ? computeOverallWn8AndWnx(memTankStats) : { wn8: calculateWn8(stats), wnx: 0 };
+    const overall = computeOverallWn8AndWnx(tankStats);
     const wn8 = overall.wn8;
     const result = {
       accountId: playerInfo.account_id,
@@ -334,6 +341,10 @@ export function registerHandlers(): void {
 
   handle('cache:clearMem', () => {
     clearMemCache();
+  });
+
+  handle('cache:clearPlayerInfo', () => {
+    cacheService.clearPlayerInfoCache();
   });
 
   handle('cache:clear', () => {

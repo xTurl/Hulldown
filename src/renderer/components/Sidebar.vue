@@ -297,7 +297,7 @@ async function switchPlayer(player: DetectedPlayer) {
                   class="text-xs font-semibold px-1.5 py-0.5 rounded"
                   :style="{ backgroundColor: wn8Color + '22', color: wn8Color }"
                 >
-                  {{ playerStore.playerInfo.wn8 }}
+                  {{ playerStore.playerInfo.wn8 }} WN8
                 </span>
                 <span class="text-xs text-muted">{{ winRate }}% WR</span>
               </div>

@@ -13,6 +13,7 @@ declare global {
       getTankDetails(tankId: number): Promise<TankDetails>;
       getTankRecommendations(tankId: number, force?: boolean): Promise<TankDetails>;
       clearCache(): Promise<void>;
+      clearPlayerInfoCache(): Promise<void>;
       getCacheStats(): Promise<CacheStats>;
       getProgress(): Promise<ProgressSnapshot[]>;
       getNews(): Promise<NewsItem[]>;
