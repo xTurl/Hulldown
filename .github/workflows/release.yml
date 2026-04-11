@@ -37,7 +37,7 @@ jobs:
 
       - name: Generate changelog
         run: |
-          npm install -g conventional-changelog-cli
+          npm install -g conventional-changelog-cli conventional-changelog-angular
           conventional-changelog -p angular -u -r 0 > CHANGELOG_LATEST.md
 
       - name: Publish release to hulldown-releases
