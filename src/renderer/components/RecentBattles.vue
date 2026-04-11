@@ -205,6 +205,7 @@ async function saveEdit(b: BattleRecord) {
               <span v-if="b.result === 'draw'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sub text-muted">DRAW</span>
             </div>
             <div class="flex items-baseline gap-2 mt-0.5 flex-wrap">
+              <!-- Safe normalization for replays parsed before Polish map translation was added -->
               <span class="text-sm text-muted">{{ normalizeMapName(b.mapName) }}</span>
             </div>
             <div class="flex items-center gap-3 mt-1 text-sm text-muted">

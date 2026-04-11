@@ -285,6 +285,7 @@ onMounted(loadTank);
             <tbody>
               <tr v-for="(map, i) in sortedMaps" :key="map.mapName"
                 :class="['border-t border-line', i % 2 === 0 ? '' : 'bg-sub/50']">
+                <!-- Safe normalization for replays parsed before Polish map translation was added -->
                 <td class="px-5 py-3 text-sm text-fg">{{ normalizeMapName(map.mapName) }}</td>
                 <td class="px-4 py-3 text-right text-sm text-muted">{{ map.battles }}</td>
                 <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(map.winRate) }">{{ map.winRate.toFixed(1) }}%</td>

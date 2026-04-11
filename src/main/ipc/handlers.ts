@@ -237,10 +237,10 @@ export function registerHandlers(): void {
     // Per-tank weighted average WN8 is always more accurate than the raw aggregate formula,
     // so we ensure tank stats and XVM expected values are loaded even if tanks:list hasn't
     // been called yet this session. Both are in-memory cached so after first call this is instant.
-    const [playerInfo, { tankStats }] = await Promise.all([
+    const [playerInfo, { tankStats }, _wn8Exp] = await Promise.all([
       wgService.getPlayerInfo(config.accountId, WG_API_KEY, config.region),
       getWgData(config),
-      getWn8Exp(),
+      getWn8Exp(), // warms memWn8Exp cache for accurate per-tank WN8 calculations
     ]);
     const stats = playerInfo.statistics.all;
     const overall = computeOverallWn8AndWnx(tankStats);
