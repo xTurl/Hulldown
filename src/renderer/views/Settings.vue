@@ -24,6 +24,7 @@ const battlesCleared = ref(false);
 const redetecting = ref(false);
 const redetectError = ref<string | null>(null);
 const redetectSuccess = ref(false);
+const appVersion = ref<string>('');
 
 const themeOptions: { value: ThemeMode; label: string; icon: string }[] = [
   { value: 'auto',  label: 'Auto',  icon: 'M12 3v1M12 20v1M4.22 4.22l.7.7M18.36 18.36l.7.7M3 12h1M20 12h1M4.92 19.08l.7-.7M18.36 5.64l.7-.7M12 7a5 5 0 100 10 5 5 0 000-10z' },
@@ -101,6 +102,7 @@ onMounted(async () => {
     form.value = { ...cfg };
   }
   cacheStats.value = await window.api.getCacheStats();
+  appVersion.value = await window.api.getAppVersion();
 });
 </script>
 
@@ -260,6 +262,11 @@ onMounted(async () => {
         </button>
       </div>
       <p v-if="battlesCleared" class="text-xs text-green-400 mt-2">Done — battles re-imported successfully.</p>
+    </div>
+
+    <!-- About -->
+    <div class="mt-4 flex items-center justify-center">
+      <span class="text-xs text-faint">Hulldown v{{ appVersion }}</span>
     </div>
   </div>
 </template>

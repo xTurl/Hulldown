@@ -1,4 +1,4 @@
-import { ipcMain, shell, dialog } from 'electron';
+import { app, ipcMain, shell, dialog } from 'electron';
 import * as configService from '../services/config';
 import * as cacheService from '../services/cache';
 import * as wgService from '../services/wargaming';
@@ -498,6 +498,8 @@ export function registerHandlers(): void {
     const config = configService.getConfig();
     return cacheService.getSessions(config.accountId, assertOptionalNumber(limit, 'limit', 30));
   });
+
+  handle('app:version', () => app.getVersion());
 
   handle('update:check', () => updaterService.checkForUpdates());
 

@@ -35,4 +35,5 @@ contextBridge.exposeInMainWorld('api', {
   selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   checkForUpdates: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
 });
