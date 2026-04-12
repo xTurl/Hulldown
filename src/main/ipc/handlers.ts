@@ -18,6 +18,8 @@ const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 let memTankStats: wgService.WgTankStat[] | null = null;
 let memEncyclopedia: Record<number, wgService.WgVehicle> | null = null;
 let memFetchedAt = 0;
+// In-flight deduplication: concurrent callers share one fetch instead of hammering the WG API
+let pendingWgData: Promise<{ tankStats: wgService.WgTankStat[]; encyclopedia: Record<number, wgService.WgVehicle> }> | null = null;
 
 // WN8 expected values cache (XVM) — 24 h TTL, best-effort (null = unavailable)
 let memWn8Exp: Map<number, wgService.Wn8ExpEntry> | null = null;
@@ -44,6 +46,7 @@ function clearMemCache() {
   memFetchedAt = 0;
   memNameToTankId = null;
   memTagToTankId = null;
+  pendingWgData = null;
 }
 
 /** Wraps an IPC handler so all errors are caught and logged before re-throwing. */
@@ -65,25 +68,33 @@ async function getWgData(config: ReturnType<typeof configService.getConfig>) {
   if (memTankStats && memEncyclopedia && Date.now() - memFetchedAt < ONE_HOUR) {
     return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
   }
-  let tankStats: wgService.WgTankStat[];
-  let encyclopedia: Record<number, wgService.WgVehicle>;
-  try {
-    [tankStats, encyclopedia] = await Promise.all([
-      wgService.getPlayerTankStats(config.accountId, WG_API_KEY, config.region),
-      wgService.getVehicleEncyclopedia(WG_API_KEY, config.region),
-    ]);
-  } catch (e) {
-    // Don't cache failed requests
-    clearMemCache();
-    throw e;
-  }
-  memTankStats = tankStats;
-  memEncyclopedia = encyclopedia;
-  memFetchedAt = Date.now();
-  // Build reverse lookups for battle enrichment
-  memNameToTankId = new Map(Object.values(encyclopedia).map(v => [v.name, v.tank_id]));
-  memTagToTankId  = new Map(Object.values(encyclopedia).map(v => [v.tag,  v.tank_id]));
-  return { tankStats, encyclopedia };
+  // Return the in-flight promise if a fetch is already running — prevents duplicate WG API
+  // requests when multiple IPC handlers call getWgData concurrently on a cold cache.
+  if (pendingWgData) return pendingWgData;
+
+  pendingWgData = (async () => {
+    try {
+      const [tankStats, encyclopedia] = await Promise.all([
+        wgService.getPlayerTankStats(config.accountId, WG_API_KEY, config.region),
+        wgService.getVehicleEncyclopedia(WG_API_KEY, config.region),
+      ]);
+      memTankStats = tankStats;
+      memEncyclopedia = encyclopedia;
+      memFetchedAt = Date.now();
+      // Build reverse lookups for battle enrichment
+      memNameToTankId = new Map(Object.values(encyclopedia).map(v => [v.name, v.tank_id]));
+      memTagToTankId  = new Map(Object.values(encyclopedia).map(v => [v.tag,  v.tank_id]));
+      return { tankStats, encyclopedia };
+    } catch (e) {
+      // Don't cache failed requests
+      clearMemCache();
+      throw e;
+    } finally {
+      pendingWgData = null;
+    }
+  })();
+
+  return pendingWgData;
 }
 
 async function getWn8Exp(): Promise<Map<number, wgService.Wn8ExpEntry> | null> {
