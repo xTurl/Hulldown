@@ -101,6 +101,7 @@ const BLOCK1_WIN = {
       kills: 2, shots: 10, directEnemyHits: 8, piercings: 7, spotted: 1,
       xp: 900, credits: 40000, health: 200, droppedCapturePoints: 0,
       damageReceived: 500, damageBlockedByArmor: 300, autoRepairCost: 2000,
+      autoLoadCost: [3000, 0], autoEquipCost: [500, 0, 0],
       markOfMastery: 3, marksOnGun: 1, lifeTime: 580, achievements: [],
     },
   },
@@ -199,6 +200,65 @@ describe('parseReplay — playerAccountId', () => {
     const result = parseReplay('/fake/abandoned.wotreplay');
 
     expect(result?.result).toBe('incomplete');
+  });
+
+  it('should calculate netCredits by subtracting repair, ammo and consumable costs', () => {
+    const buf = buildReplayBuffer(BLOCK0_NORMAL, BLOCK1_WIN);
+    setupReplayFile(buf);
+
+    const result = parseReplay('/fake/replay.wotreplay');
+
+    // credits(40000) - autoRepairCost(2000) - autoLoadCost(3000) - autoEquipCost(500) = 34500
+    expect(result?.credits).toBe(40000);
+    expect(result?.netCredits).toBe(34500);
+  });
+
+  it('should calculate netCredits when cost fields are arrays (real WoT replay format)', () => {
+    const block1 = {
+      arenaUniqueID: '7777',
+      common: { winnerTeam: 1, duration: 400 },
+      personal: {
+        '112233': {
+          team: 1, damageDealt: 2000, damageAssistedRadio: 0, damageAssistedTrack: 0,
+          kills: 1, shots: 5, directEnemyHits: 4, piercings: 4, spotted: 0,
+          xp: 600, credits: 30000, health: 150, droppedCapturePoints: 0,
+          damageReceived: 0, damageBlockedByArmor: 0, autoRepairCost: 1500,
+          autoLoadCost: [2500, 0], autoEquipCost: [400, 200, 0],
+          markOfMastery: 2, marksOnGun: 0, lifeTime: 390, achievements: [],
+        },
+      },
+    };
+    const buf = buildReplayBuffer(BLOCK0_NORMAL, block1);
+    setupReplayFile(buf);
+
+    const result = parseReplay('/fake/replay3.wotreplay');
+
+    // credits(30000) - repair(1500) - ammo([2500,0]=2500) - consumables([400,200,0]=600) = 25400
+    expect(result?.netCredits).toBe(25400);
+  });
+
+  it('should calculate netCredits correctly when optional cost fields are absent', () => {
+    const block1 = {
+      arenaUniqueID: '8888',
+      common: { winnerTeam: 1, duration: 300 },
+      personal: {
+        '112233': {
+          team: 1, damageDealt: 1000, damageAssistedRadio: 0, damageAssistedTrack: 0,
+          kills: 0, shots: 5, directEnemyHits: 3, piercings: 3, spotted: 0,
+          xp: 400, credits: 20000, health: 300, droppedCapturePoints: 0,
+          damageReceived: 0, damageBlockedByArmor: 0, autoRepairCost: 1000,
+          // no autoLoadCost, no autoEquipCost
+          markOfMastery: 1, marksOnGun: 0, lifeTime: 290, achievements: [],
+        },
+      },
+    };
+    const buf = buildReplayBuffer(BLOCK0_NORMAL, block1);
+    setupReplayFile(buf);
+
+    const result = parseReplay('/fake/replay2.wotreplay');
+
+    // credits(20000) - autoRepairCost(1000) - 0 - 0 = 19000
+    expect(result?.netCredits).toBe(19000);
   });
 });
 

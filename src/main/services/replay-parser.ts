@@ -17,6 +17,13 @@ const BATTLE_TYPE_LABELS: Record<string, string> = {
   epic:       'Grand Battle',
 };
 
+/** WoT replay cost fields (autoLoadCost, autoEquipCost) can be either a number
+ *  or an array of numbers. Sum all elements to get the total cost. */
+function sumCost(value: unknown): number {
+  if (Array.isArray(value)) return (value as number[]).reduce((acc, v) => acc + (Number(v) || 0), 0);
+  return Number(value) || 0;
+}
+
 export function formatTankName(vehicleKey: string): string {
   // "uk-GB123_GSOR_1006_v7" or "sweden:S10_Strv_103_0_Series"
   const withoutNation = vehicleKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '');
@@ -125,7 +132,7 @@ export function parseReplay(filePath: string): ParsedBattle | null {
       damageReceived: personal.damageReceived          ?? 0,
       damageBlocked:  personal.damageBlockedByArmor    ?? 0,
       repairCost:     personal.autoRepairCost          ?? 0,
-      netCredits:     (personal.credits ?? 0) - (personal.autoRepairCost ?? 0),
+      netCredits:     (personal.credits ?? 0) - (personal.autoRepairCost ?? 0) - sumCost(personal.autoLoadCost) - sumCost(personal.autoEquipCost),
       markOfMastery:  personal.markOfMastery           ?? 0,
       marksOnGun:     personal.marksOnGun              ?? 0,
       lifeTime:       personal.lifeTime                ?? 0,
