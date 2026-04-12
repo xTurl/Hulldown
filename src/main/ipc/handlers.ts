@@ -412,13 +412,18 @@ export function registerHandlers(): void {
     const config = configService.getConfig();
     if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
     const knownIds = cacheService.getKnownArenaIds(config.accountId);
-    return replayParser.scanReplays(
+    const result = replayParser.scanReplays(
       config.replaysDir,
       config.accountId,
       config.username,
       knownIds,
       (batch) => cacheService.insertBattles(batch as BattleRecord[]),
     );
+    // WoT rewrites replay files with full stats after battle end, even for
+    // battles the player left early. The scan inserts the complete version
+    // under its real arenaUniqueID; clean up the stale partial_ counterparts.
+    cacheService.cleanupPartialBattles(config.accountId);
+    return result;
   });
 
   handle('replays:list', async (limit, offset) => {
@@ -458,20 +463,6 @@ export function registerHandlers(): void {
         ),
       };
     });
-  });
-
-  handle('replays:update-battle', (id, damage, assist, kills, result) => {
-    const config = configService.getConfig();
-    cacheService.updateBattleStats(
-      assertNumber(id, 'id'),
-      config.accountId,
-      {
-        damage: assertNumber(damage, 'damage'),
-        assist: assertNumber(assist, 'assist'),
-        kills:  assertNumber(kills, 'kills'),
-        result: assertString(result, 'result') as 'win' | 'loss' | 'draw',
-      },
-    );
   });
 
   handle('replays:count', () => {

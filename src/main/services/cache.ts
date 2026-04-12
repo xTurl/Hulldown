@@ -182,6 +182,34 @@ export function getKnownArenaIds(accountId: number): Set<string> {
   return new Set(rows.map(r => r.arena_id));
 }
 
+/**
+ * Removes partial battles that now have a complete counterpart.
+ *
+ * WoT writes a 1-block replay when a player joins, then rewrites the same
+ * file with block 2 (full stats) once the battle ends — even if the player
+ * left early. The scan inserts the complete version under its real arenaUniqueID
+ * while the original partial_<filename> record stays, causing duplicates.
+ *
+ * Matching key: same account + tank + played_at (both parsed from block0.dateTime
+ * so they are always identical for the same file).
+ *
+ * Returns the number of stale partial records deleted.
+ */
+export function cleanupPartialBattles(accountId: number): number {
+  const result = getDb().prepare(`
+    DELETE FROM battles
+    WHERE account_id = ? AND arena_id LIKE 'partial_%'
+    AND EXISTS (
+      SELECT 1 FROM battles b2
+      WHERE b2.account_id = battles.account_id
+        AND b2.tank_key   = battles.tank_key
+        AND b2.played_at  = battles.played_at
+        AND b2.arena_id   NOT LIKE 'partial_%'
+    )
+  `).run(accountId);
+  return result.changes;
+}
+
 const BATTLE_SELECT = `
   id, account_id as accountId, arena_id as arenaId, played_at as playedAt,
   tank_key as tankKey, tank_name as tankName, map_name as mapName,
@@ -433,16 +461,6 @@ export function getSessions(accountId: number, limit = 20): SessionSummary[] {
     FROM with_session
     GROUP BY session_num ORDER BY session_num DESC LIMIT ?
   `).all(accountId, limit) as SessionSummary[];
-}
-
-export function updateBattleStats(
-  id: number,
-  accountId: number,
-  data: { damage: number; assist: number; kills: number; result: 'win' | 'loss' | 'draw' },
-): void {
-  getDb()
-    .prepare('UPDATE battles SET damage = ?, assist = ?, kills = ?, result = ? WHERE id = ? AND account_id = ?')
-    .run(data.damage, data.assist, data.kills, data.result, id, accountId);
 }
 
 export function backfillMissingWnx(wnx: number): void {

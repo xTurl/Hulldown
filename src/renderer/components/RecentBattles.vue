@@ -123,32 +123,6 @@ const MASTERY_COLOR = ['', '#9ca3af', '#a78bfa', '#fbbf24', '#f97316'];
 function masteryLabel(m: number) { return MASTERY_LABEL[m] ?? ''; }
 function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
-// Manual stats entry for incomplete battles
-const editingBattleId = ref<number | null>(null);
-const editForm = ref<{ result: 'win' | 'loss' | 'draw'; damage: number; kills: number; assist: number }>({
-  result: 'draw', damage: 0, kills: 0, assist: 0,
-});
-const saving = ref(false);
-
-function startEdit(b: BattleRecord) {
-  editingBattleId.value = b.id;
-  editForm.value = { result: 'draw', damage: 0, kills: 0, assist: 0 };
-}
-
-function cancelEdit() {
-  editingBattleId.value = null;
-}
-
-async function saveEdit(b: BattleRecord) {
-  saving.value = true;
-  try {
-    await window.api.updateBattle(b.id, editForm.value.damage, editForm.value.assist, editForm.value.kills, editForm.value.result);
-    await loadPage(page.value);
-    editingBattleId.value = null;
-  } finally {
-    saving.value = false;
-  }
-}
 </script>
 
 <template>
@@ -219,8 +193,8 @@ async function saveEdit(b: BattleRecord) {
             </div>
           </div>
 
-          <!-- Stats grid (hidden for incomplete when editing) -->
-          <div v-if="b.result !== 'incomplete' || editingBattleId !== b.id" class="flex items-center gap-1 flex-wrap justify-end">
+          <!-- Stats grid -->
+          <div class="flex items-center gap-1 flex-wrap justify-end">
 
             <!-- WN8 -->
             <div class="text-center bg-sub rounded-lg px-3 py-2 min-w-[56px]">
@@ -287,77 +261,6 @@ async function saveEdit(b: BattleRecord) {
           </div>
         </div>
 
-        <!-- Manual stats entry for incomplete battles -->
-        <template v-if="b.result === 'incomplete'">
-          <!-- Trigger button (when not editing) -->
-          <div v-if="editingBattleId !== b.id" class="mt-2">
-            <button
-              @click="startEdit(b)"
-              class="flex items-center gap-1.5 text-xs text-faint hover:text-gold transition-colors px-2 py-1 rounded hover:bg-sub"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                   stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 shrink-0">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-              Enter stats manually
-            </button>
-          </div>
-
-          <!-- Inline edit form -->
-          <div v-if="editingBattleId === b.id" class="mt-3 bg-sub border border-line rounded-xl p-4">
-            <p class="text-xs font-medium text-muted mb-3">Enter battle result manually</p>
-            <div class="flex flex-wrap gap-3 items-end">
-              <!-- Result -->
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-faint">Result</label>
-                <select v-model="editForm.result"
-                        class="bg-card border border-line rounded-lg px-3 py-1.5 text-sm text-fg focus:outline-none"
-                        @focus="(e: Event) => ((e.target as HTMLSelectElement).style.borderColor = 'var(--gold)')"
-                        @blur="(e: Event) => ((e.target as HTMLSelectElement).style.borderColor = '')">
-                  <option value="win">Win</option>
-                  <option value="loss">Loss</option>
-                  <option value="draw">Draw</option>
-                </select>
-              </div>
-              <!-- Damage -->
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-faint">Damage</label>
-                <input type="number" min="0" v-model.number="editForm.damage" placeholder="0"
-                       class="bg-card border border-line rounded-lg px-3 py-1.5 text-sm text-fg w-24 focus:outline-none"
-                       @focus="(e: Event) => ((e.target as HTMLInputElement).style.borderColor = 'var(--gold)')"
-                       @blur="(e: Event) => ((e.target as HTMLInputElement).style.borderColor = '')" />
-              </div>
-              <!-- Frags -->
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-faint">Frags</label>
-                <input type="number" min="0" v-model.number="editForm.kills" placeholder="0"
-                       class="bg-card border border-line rounded-lg px-3 py-1.5 text-sm text-fg w-16 focus:outline-none"
-                       @focus="(e: Event) => ((e.target as HTMLInputElement).style.borderColor = 'var(--gold)')"
-                       @blur="(e: Event) => ((e.target as HTMLInputElement).style.borderColor = '')" />
-              </div>
-              <!-- Assist -->
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-faint">Assist</label>
-                <input type="number" min="0" v-model.number="editForm.assist" placeholder="0"
-                       class="bg-card border border-line rounded-lg px-3 py-1.5 text-sm text-fg w-24 focus:outline-none"
-                       @focus="(e: Event) => ((e.target as HTMLInputElement).style.borderColor = 'var(--gold)')"
-                       @blur="(e: Event) => ((e.target as HTMLInputElement).style.borderColor = '')" />
-              </div>
-              <!-- Action buttons -->
-              <div class="flex gap-2 ml-auto">
-                <button @click="cancelEdit"
-                        class="px-3 py-1.5 text-xs text-faint hover:text-fg bg-card border border-line rounded-lg transition-colors">
-                  Cancel
-                </button>
-                <button @click="saveEdit(b)" :disabled="saving"
-                        class="px-3 py-1.5 text-xs text-gold bg-gold-bg border border-gold/30 rounded-lg hover:opacity-80 disabled:opacity-50 transition-opacity">
-                  {{ saving ? 'Saving...' : 'Save stats' }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </template>
       </div>
     </div>
 
