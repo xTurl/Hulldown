@@ -14,6 +14,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -38,7 +40,7 @@ jobs:
       - name: Generate changelog
         run: |
           npm install -g conventional-changelog-cli conventional-changelog-angular
-          conventional-changelog -p angular -u -r 0 > CHANGELOG_LATEST.md
+          conventional-changelog -p angular -r 1 > CHANGELOG_LATEST.md
 
       - name: Publish release to hulldown-releases
         uses: softprops/action-gh-release@v2
