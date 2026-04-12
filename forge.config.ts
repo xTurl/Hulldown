@@ -15,10 +15,13 @@ const config: ForgeConfig = {
     asar: {
       unpack: '**/*.node',
     },
+    icon: path.resolve(__dirname, 'assets/icon'),
     extraResource: [
       'node_modules/better-sqlite3',
       'node_modules/bindings',
       'node_modules/file-uri-to-path',
+      'assets/icon.png',
+      'assets/icon.ico',
     ],
   },
   rebuildConfig: {
@@ -38,8 +41,8 @@ const config: ForgeConfig = {
             fs.renameSync(from, to);
           }
         }
-        // Copy app icon so the .desktop file always finds it
-        const iconSrc = path.join(__dirname, 'node_modules/electron-installer-debian/resources/icon.png');
+        // Copy app icon so the BrowserWindow icon path always finds it
+        const iconSrc = path.join(__dirname, 'assets/icon.png');
         const iconDest = path.join(outputPath, 'hulldown.png');
         if (fs.existsSync(iconSrc) && !fs.existsSync(iconDest)) {
           fs.copyFileSync(iconSrc, iconDest);
@@ -48,10 +51,11 @@ const config: ForgeConfig = {
     },
   },
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      setupIcon: path.resolve(__dirname, 'assets/icon.ico'),
+    }),
     new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
+    new MakerDeb({ options: { icon: path.resolve(__dirname, 'assets/icon.png') } }),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
