@@ -141,7 +141,7 @@ const mapSort = ref<'battles' | 'winRate' | 'avgDamage'>('battles');
 const mapPeriod = ref<number>(30 * 86400000); // ms, default 30 days
 
 const MAP_PERIODS = [
-  { label: '1 day',   ms: 1  * 86400000 },
+  { label: 'Today',    ms: -1 }, // sentinel: calendar day (not rolling 24h)
   { label: '7 days',  ms: 7  * 86400000 },
   { label: '14 days', ms: 14 * 86400000 },
   { label: '30 days', ms: 30 * 86400000 },
@@ -153,9 +153,18 @@ const sortedMaps = computed(() =>
   [...mapData.value].sort((a, b) => b[mapSort.value] - a[mapSort.value])
 );
 
+function startOfTodayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 async function loadMaps() {
   mapLoading.value = true;
-  mapData.value = await window.api.getMapStats(mapPeriod.value);
+  const sinceMs = mapPeriod.value === -1
+    ? Date.now() - startOfTodayMs()
+    : mapPeriod.value;
+  mapData.value = await window.api.getMapStats(sinceMs);
   mapLoading.value = false;
 }
 
@@ -405,7 +414,9 @@ function sessionWnx(s: SessionSummary): number {
             </div>
           </div>
         </div>
-        <div v-else class="py-16 text-center text-faint text-sm">No map data yet.</div>
+        <div v-else class="py-16 text-center text-faint text-sm">
+          {{ mapPeriod === -1 ? 'No battles today yet.' : 'No map data yet.' }}
+        </div>
       </div>
 
       <!-- ── TANKS ── -->
