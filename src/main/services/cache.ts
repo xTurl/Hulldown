@@ -333,7 +333,6 @@ export interface TodaySession {
 }
 
 export function getTodaySession(accountId: number): TodaySession | null {
-  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
   const row = getDb().prepare(`
     SELECT COUNT(*) as battles,
            SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
@@ -348,8 +347,11 @@ export function getTodaySession(accountId: number): TodaySession | null {
            SUM(damage) as totalDamage, SUM(kills) as totalFrags,
            SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped,
            SUM(net_credits) as totalNetCredits
-    FROM battles WHERE account_id = ? AND result != 'incomplete' AND played_at >= ?
-  `).get(accountId, midnight.getTime()) as TodaySession & { battles: number } | undefined;
+    FROM battles
+    WHERE account_id = ?
+      AND result != 'incomplete'
+      AND date(played_at / 1000, 'unixepoch', 'localtime') = date('now', 'localtime')
+  `).get(accountId) as TodaySession & { battles: number } | undefined;
   if (!row || row.battles === 0) return null;
   return { ...row, totalWins: row.wins };
 }

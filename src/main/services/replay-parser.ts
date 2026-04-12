@@ -49,7 +49,8 @@ export function parseReplay(filePath: string): ParsedBattle | null {
       if (!block0.dateTime || !block0.playerVehicle) return null;
       const [datePart, timePart] = (block0.dateTime as string).split(' ');
       const [day, month, year] = datePart.split('.');
-      const playedAt = new Date(`${year}-${month}-${day}T${timePart}`).getTime();
+      const [h, m, s] = timePart.split(':');
+      const playedAt = new Date(+year, +month - 1, +day, +h, +m, +s).getTime();
       const gameplayID: string = block0.gameplayID ?? 'ctf';
       fs.closeSync(fd); fd = -1;
       return {
@@ -87,10 +88,11 @@ export function parseReplay(filePath: string): ParsedBattle | null {
     const personal = result.personal[personalKey];
     const common = result.common;
 
-    // Parse "03.04.2026 12:16:09"
+    // Parse "03.04.2026 12:16:09" as local time
     const [datePart, timePart] = (block0.dateTime as string).split(' ');
     const [day, month, year] = datePart.split('.');
-    const playedAt = new Date(`${year}-${month}-${day}T${timePart}`).getTime();
+    const [h, m, s] = timePart.split(':');
+    const playedAt = new Date(+year, +month - 1, +day, +h, +m, +s).getTime();
 
     const playerTeam: number = personal.team;
     const winnerTeam: number = common.winnerTeam ?? 0;
