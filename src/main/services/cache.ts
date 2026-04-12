@@ -210,6 +210,34 @@ export function cleanupPartialBattles(accountId: number): number {
   return result.changes;
 }
 
+/**
+ * Returns all partial (incomplete) battle records for an account.
+ * Used to match against temp.wotreplay on Windows where WoT doesn't
+ * rewrite the dated replay file with full results for early-exit battles.
+ */
+export function getPartialBattles(accountId: number): Array<{ arenaId: string; playedAt: number; tankKey: string }> {
+  return (getDb().prepare(`
+    SELECT arena_id as arenaId, played_at as playedAt, tank_key as tankKey
+    FROM battles WHERE account_id = ? AND arena_id LIKE 'partial_%'
+  `).all(accountId)) as Array<{ arenaId: string; playedAt: number; tankKey: string }>;
+}
+
+/**
+ * Replaces a partial battle record with complete data from temp.wotreplay.
+ * The partial record is deleted and the full record is inserted under the real arenaUniqueID.
+ */
+export function resolvePartialBattle(
+  accountId: number,
+  partialArenaId: string,
+  fullBattle: import('../types').BattleRecord,
+): void {
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('DELETE FROM battles WHERE account_id = ? AND arena_id = ?').run(accountId, partialArenaId);
+    insertBattles([fullBattle]);
+  })();
+}
+
 const BATTLE_SELECT = `
   id, account_id as accountId, arena_id as arenaId, played_at as playedAt,
   tank_key as tankKey, tank_name as tankName, map_name as mapName,

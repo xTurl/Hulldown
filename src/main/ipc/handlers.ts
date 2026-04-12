@@ -1,4 +1,5 @@
 import { app, ipcMain, shell, dialog } from 'electron';
+import path from 'path';
 import * as configService from '../services/config';
 import * as cacheService from '../services/cache';
 import * as wgService from '../services/wargaming';
@@ -423,6 +424,30 @@ export function registerHandlers(): void {
     // battles the player left early. The scan inserts the complete version
     // under its real arenaUniqueID; clean up the stale partial_ counterparts.
     cacheService.cleanupPartialBattles(config.accountId);
+
+    // Windows fix: WoT does not rewrite the dated replay file for battles the
+    // player left early — only temp.wotreplay gets block1 appended when the
+    // battle ends on the server. Try to resolve any remaining partial battles
+    // by matching them against temp.wotreplay.
+    const partials = cacheService.getPartialBattles(config.accountId);
+    if (partials.length > 0) {
+      const tempPath = path.join(config.replaysDir, 'temp.wotreplay');
+      const tempParsed = replayParser.parseReplay(tempPath);
+      if (tempParsed && tempParsed.result !== 'incomplete') {
+        for (const partial of partials) {
+          if (partial.tankKey === tempParsed.tankKey && partial.playedAt === tempParsed.playedAt) {
+            cacheService.resolvePartialBattle(config.accountId, partial.arenaId, {
+              ...tempParsed,
+              id: 0,
+              accountId: config.accountId,
+            } as BattleRecord);
+            result.added++;
+            break;
+          }
+        }
+      }
+    }
+
     return result;
   });
 
