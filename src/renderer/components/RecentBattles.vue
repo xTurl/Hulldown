@@ -57,6 +57,8 @@ async function loadPage(p: number) {
   loading.value = false;
 }
 
+const emit = defineEmits<{ scanned: [] }>();
+
 async function scan() {
   scanning.value = true;
   newCount.value = 0;
@@ -69,6 +71,7 @@ async function scan() {
     }
   } finally {
     scanning.value = false;
+    emit('scanned');
   }
 }
 

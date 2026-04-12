@@ -9,6 +9,7 @@ const props = defineProps<{
   snapshots: ProgressSnapshot[];
   currentWnx: number;
   syncing: boolean;
+  refreshKey?: number;
 }>();
 
 const configStore = useConfigStore();
@@ -25,6 +26,7 @@ async function fetchSession() {
 }
 
 watch(() => props.syncing, (syncing) => { if (!syncing) fetchSession(); });
+watch(() => props.refreshKey, () => fetchSession());
 watch(() => configStore.config?.username, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) { replaySession.value = null; fetchSession(); }
 });
@@ -92,6 +94,11 @@ const snapshotSession = computed((): SnapshotSession | null => {
   };
 });
 
+// Show snapshot fallback only when replays directory is not configured
+const activeSession = computed(() =>
+  !configStore.config?.replaysDir ? snapshotSession.value : null
+);
+
 function deltaColor(val: number) {
   if (val > 0) return '#34d399';
   if (val < 0) return '#f87171';
@@ -105,21 +112,13 @@ function deltaSign(val: number) { return val > 0 ? '+' : ''; }
     class="bg-card border border-line rounded-xl mb-6"
     style="box-shadow: 0 4px 20px rgba(0,0,0,0.25)"
   >
-    <div class="px-5 py-4 border-b border-line flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <h3 class="text-sm font-semibold text-fg">Today's session</h3>
-        <span v-if="replayDisplay" class="text-xs text-faint bg-sub px-2 py-0.5 rounded-full">from replays</span>
-        <span v-else-if="snapshotSession" class="text-xs text-faint bg-sub px-2 py-0.5 rounded-full">local</span>
-      </div>
-      <button @click="fetchSession" :disabled="loading"
-        class="text-faint hover:text-muted disabled:opacity-40 transition-colors text-sm"
-        title="Refresh session"
-      >
-        <span :class="loading ? 'animate-spin inline-block' : ''">↻</span>
-      </button>
+    <div class="px-5 py-4 border-b border-line flex items-center gap-2">
+      <h3 class="text-sm font-semibold text-fg">Today's session</h3>
+      <span v-if="replayDisplay" class="text-xs text-faint bg-sub px-2 py-0.5 rounded-full">from replays</span>
+      <span v-else-if="activeSession" class="text-xs text-faint bg-sub px-2 py-0.5 rounded-full">local</span>
     </div>
 
-    <div v-if="loading && !replayDisplay && !snapshotSession" class="px-5 py-8 text-center">
+    <div v-if="loading && !replayDisplay && !activeSession" class="px-5 py-8 text-center">
       <p class="text-sm text-muted animate-pulse">Loading session...</p>
     </div>
 
@@ -174,51 +173,51 @@ function deltaSign(val: number) { return val > 0 ? '+' : ''; }
       </div>
     </div>
 
-    <!-- Snapshot fallback -->
-    <div v-else-if="snapshotSession" class="p-5">
+    <!-- Snapshot fallback (only when replays not configured) -->
+    <div v-else-if="activeSession" class="p-5">
       <div class="flex flex-wrap gap-3 mb-3">
         <div class="bg-sub rounded-lg p-3 min-w-[120px] flex-1">
           <p class="text-xs text-muted mb-1">Battles</p>
-          <p class="text-2xl font-bold text-fg leading-none">{{ snapshotSession.battles }}</p>
-          <p class="text-xs text-faint mt-1.5">{{ snapshotSession.wins }}W / {{ snapshotSession.battles - snapshotSession.wins }}L</p>
+          <p class="text-2xl font-bold text-fg leading-none">{{ activeSession.battles }}</p>
+          <p class="text-xs text-faint mt-1.5">{{ activeSession.wins }}W / {{ activeSession.battles - activeSession.wins }}L</p>
         </div>
         <div class="bg-sub rounded-lg p-3 min-w-[120px] flex-1">
           <p class="text-xs text-muted mb-1">WN8</p>
-          <p class="text-2xl font-bold leading-none" :style="{ color: getWn8Color(snapshotSession.wn8) }">{{ snapshotSession.wn8 || '—' }}</p>
+          <p class="text-2xl font-bold leading-none" :style="{ color: getWn8Color(activeSession.wn8) }">{{ activeSession.wn8 || '—' }}</p>
         </div>
         <div class="bg-sub rounded-lg p-3 min-w-[120px] flex-1">
           <p class="text-xs text-muted mb-1">Win rate</p>
-          <p class="text-2xl font-bold leading-none" :style="{ color: getWrColor(snapshotSession.winRate) }">{{ snapshotSession.winRate.toFixed(1) }}%</p>
+          <p class="text-2xl font-bold leading-none" :style="{ color: getWrColor(activeSession.winRate) }">{{ activeSession.winRate.toFixed(1) }}%</p>
         </div>
         <div class="bg-sub rounded-lg p-3 min-w-[120px] flex-1">
           <p class="text-xs text-muted mb-1">Avg damage</p>
-          <p class="text-2xl font-bold text-fg leading-none">{{ snapshotSession.dpg > 0 ? snapshotSession.dpg.toLocaleString('en-US') : '—' }}</p>
+          <p class="text-2xl font-bold text-fg leading-none">{{ activeSession.dpg > 0 ? activeSession.dpg.toLocaleString('en-US') : '—' }}</p>
         </div>
       </div>
       <div class="flex flex-wrap gap-3">
         <div class="border border-line rounded-lg px-3 py-2.5 min-w-[130px] flex-1 flex items-center justify-between">
           <div>
             <p class="text-xs text-muted">WNX change</p>
-            <p class="text-lg font-bold mt-0.5" :style="{ color: deltaColor(snapshotSession.wnxDelta) }">
-              <span v-if="snapshotSession.wnxDelta !== 0">{{ deltaSign(snapshotSession.wnxDelta) }}{{ snapshotSession.wnxDelta }}</span>
+            <p class="text-lg font-bold mt-0.5" :style="{ color: deltaColor(activeSession.wnxDelta) }">
+              <span v-if="activeSession.wnxDelta !== 0">{{ deltaSign(activeSession.wnxDelta) }}{{ activeSession.wnxDelta }}</span>
               <span v-else class="text-faint">—</span>
             </p>
           </div>
-          <span v-if="snapshotSession.wnxDelta !== 0" class="text-lg" :style="{ color: deltaColor(snapshotSession.wnxDelta) }">
-            {{ snapshotSession.wnxDelta > 0 ? '↑' : '↓' }}
+          <span v-if="activeSession.wnxDelta !== 0" class="text-lg" :style="{ color: deltaColor(activeSession.wnxDelta) }">
+            {{ activeSession.wnxDelta > 0 ? '↑' : '↓' }}
           </span>
         </div>
         <div class="border border-line rounded-lg px-3 py-2.5 min-w-[110px] flex-1">
           <p class="text-xs text-muted">Survival</p>
-          <p class="text-lg font-bold text-fg mt-0.5">{{ snapshotSession.survival.toFixed(0) }}%</p>
+          <p class="text-lg font-bold text-fg mt-0.5">{{ activeSession.survival.toFixed(0) }}%</p>
         </div>
         <div class="border border-line rounded-lg px-3 py-2.5 min-w-[110px] flex-1">
           <p class="text-xs text-muted">Frags / battle</p>
-          <p class="text-lg font-bold text-fg mt-0.5">{{ snapshotSession.frags.toFixed(2) }}</p>
+          <p class="text-lg font-bold text-fg mt-0.5">{{ activeSession.frags.toFixed(2) }}</p>
         </div>
         <div class="border border-line rounded-lg px-3 py-2.5 min-w-[110px] flex-1">
           <p class="text-xs text-muted">XP earned</p>
-          <p class="text-lg font-bold text-fg mt-0.5">{{ snapshotSession.xp.toLocaleString('en-US') }}</p>
+          <p class="text-lg font-bold text-fg mt-0.5">{{ activeSession.xp.toLocaleString('en-US') }}</p>
         </div>
       </div>
     </div>
@@ -226,7 +225,7 @@ function deltaSign(val: number) { return val > 0 ? '+' : ''; }
     <!-- No data -->
     <div v-else class="px-5 py-6 text-center">
       <p class="text-sm text-muted">No battles today</p>
-      <p class="text-xs text-faint mt-1">Set up your replays directory in Settings to enable session tracking.</p>
+      <p v-if="!configStore.config?.replaysDir" class="text-xs text-faint mt-1">Set up your replays directory in Settings to enable session tracking.</p>
     </div>
   </div>
 </template>
