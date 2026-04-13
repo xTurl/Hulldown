@@ -59,11 +59,11 @@ async function loadPage(p: number) {
 
 const emit = defineEmits<{ scanned: [] }>();
 
-async function scan() {
+async function scan(quick = false) {
   scanning.value = true;
   newCount.value = 0;
   try {
-    const result = await window.api.scanReplays();
+    const result = await window.api.scanReplays(quick);
     newCount.value = result.added;
     if (result.added > 0) {
       totalCount.value = await window.api.getBattlesCount();
@@ -82,9 +82,12 @@ onMounted(async () => {
   [totalCount.value] = await Promise.all([window.api.getBattlesCount()]);
   await loadPage(0);
   await scan();
-  autoRefreshTimer = setInterval(() => {
-    if (!scanning.value) scan();
-  }, 30_000);
+  const cfg = await window.api.getConfig();
+  if (cfg.autoRefresh !== false) {
+    autoRefreshTimer = setInterval(() => {
+      if (!scanning.value) scan(true);
+    }, 30_000);
+  }
 });
 
 onUnmounted(() => {

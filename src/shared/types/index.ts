@@ -10,6 +10,7 @@ export interface AppConfig {
   username: string;
   region: string;
   replaysDir: string;
+  autoRefresh: boolean;
 }
 
 export interface BattleRecord {

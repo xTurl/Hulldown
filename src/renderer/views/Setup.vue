@@ -152,8 +152,22 @@ async function finish() {
       <div v-else-if="step === 'keys'" class="space-y-4">
         <p class="text-sm text-muted text-center mb-2">
           Optionally add your Claude API key for AI-powered tips per tank.<br>
-          <span class="text-faint">You can add it later in Settings.</span>
+          <span class="text-faint">You can skip this and add it later in Settings.</span>
         </p>
+
+        <div class="bg-sub border border-line rounded-lg px-4 py-3 text-xs text-muted space-y-1">
+          <p class="font-semibold text-fg mb-2">How to get your free API key:</p>
+          <p>1. Click the link below to open Anthropic Console</p>
+          <p>2. Sign up or log in (free account)</p>
+          <p>3. Go to <span class="text-fg font-mono">API Keys</span> and click <span class="text-fg font-mono">+ Create key</span></p>
+          <p>4. Copy the key and paste it below</p>
+          <button
+            @click="() => window.api.openExternal('https://console.anthropic.com/settings/keys')"
+            class="mt-2 inline-flex items-center gap-1.5 text-gold hover:opacity-80 transition-opacity font-medium"
+          >
+            Open console.anthropic.com →
+          </button>
+        </div>
 
         <div>
           <label class="block text-xs text-muted mb-1">
@@ -166,7 +180,6 @@ async function finish() {
             @focus="(e) => (e.target as HTMLInputElement).style.borderColor = 'var(--gold)'"
             @blur="(e) => (e.target as HTMLInputElement).style.borderColor = ''"
           />
-          <p class="text-xs text-faint mt-1">Get yours at console.anthropic.com</p>
         </div>
 
         <button

@@ -9,6 +9,7 @@ const DEFAULT_CONFIG: AppConfig = {
   username: '',
   region: 'EU',
   replaysDir: '',
+  autoRefresh: true,
 };
 
 function getConfigPath(): string {

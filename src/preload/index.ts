@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   detectAllPlayers: (): Promise<import('../main/services/replay-parser').DetectedPlayer[]> => ipcRenderer.invoke('player:detect-all'),
   getTankMapStats: (tankName: string): Promise<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]> => ipcRenderer.invoke('replays:tank-maps', tankName),
   clearBattles: (): Promise<void> => ipcRenderer.invoke('replays:clear'),
-  scanReplays: (): Promise<{ added: number; skipped: number; errors: number }> => ipcRenderer.invoke('replays:scan'),
+  scanReplays: (quick?: boolean): Promise<{ added: number; skipped: number; errors: number }> => ipcRenderer.invoke('replays:scan', quick),
   getBattles: (limit?: number, offset?: number): Promise<BattleRecord[]> => ipcRenderer.invoke('replays:list', limit, offset),
   getBattlesCount: (): Promise<number> => ipcRenderer.invoke('replays:count'),
   getMapStats: (sinceMs?: number): Promise<import('../main/services/cache').ReplayMapStat[]> => ipcRenderer.invoke('replays:map-stats', sinceMs),

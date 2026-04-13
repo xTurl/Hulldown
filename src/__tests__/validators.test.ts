@@ -125,6 +125,7 @@ describe('assertConfig', () => {
     username: 'tanker99',
     region: 'EU',
     replaysDir: '/home/user/replays',
+    autoRefresh: true,
   };
 
   it('returns the config unchanged when all fields are correct', () => {
@@ -147,6 +148,7 @@ describe('assertConfig', () => {
       username: '',
       region: 'EU',
       replaysDir: '',
+      autoRefresh: true,
     });
   });
 

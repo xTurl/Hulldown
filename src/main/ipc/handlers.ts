@@ -32,6 +32,9 @@ let memNameToTankId: Map<string, number> | null = null;
 // vehicle tag → tankId lookup (more reliable than name matching for replay enrichment)
 let memTagToTankId: Map<string, number> | null = null;
 
+// Timestamp of the last successful replay scan — used to limit incremental scans
+let lastScanTime = 0;
+
 /**
  * Extracts the WG vehicle tag from a replay playerVehicle key.
  * "uk-GB123_GSOR_1006_v7"  → "GB123_GSOR_1006_v7"
@@ -409,17 +412,23 @@ export function registerHandlers(): void {
     cacheService.clearBattles(config.accountId);
   });
 
-  handle('replays:scan', async () => {
+  handle('replays:scan', async (quick) => {
     const config = configService.getConfig();
     if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
     const knownIds = cacheService.getKnownArenaIds(config.accountId);
+    // Incremental scan: only parse replay files whose filename date is within a
+    // 2-minute safety buffer of the last scan. This skips thousands of already-
+    // known files and keeps the auto-refresh tick fast regardless of library size.
+    const sinceMs = (quick && lastScanTime > 0) ? lastScanTime - 2 * 60 * 1000 : undefined;
     const result = await replayParser.scanReplays(
       config.replaysDir,
       config.accountId,
       config.username,
       knownIds,
       (batch) => cacheService.insertBattles(batch as BattleRecord[]),
+      sinceMs,
     );
+    lastScanTime = Date.now();
     // WoT rewrites replay files with full stats after battle end, even for
     // battles the player left early. The scan inserts the complete version
     // under its real arenaUniqueID; clean up the stale partial_ counterparts.

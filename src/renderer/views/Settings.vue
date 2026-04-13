@@ -12,7 +12,7 @@ const tanksStore = useTanksStore();
 const themeStore = useThemeStore();
 
 const form = ref<AppConfig>({
-  claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '',
+  claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '', autoRefresh: true,
 });
 const saved = ref(false);
 const saving = ref(false);
@@ -192,7 +192,13 @@ onMounted(async () => {
           onfocus="this.style.borderColor='var(--gold)'"
           onblur="this.style.borderColor='var(--line)'"
         />
-        <p class="text-xs text-faint mt-1">Get yours at console.anthropic.com</p>
+        <p class="text-xs text-faint mt-1">
+          Don't have a key?
+          <button
+            @click="() => window.api.openExternal('https://console.anthropic.com/settings/keys')"
+            class="text-gold hover:opacity-80 transition-opacity"
+          >Get one at console.anthropic.com →</button>
+        </p>
       </div>
     </div>
 
@@ -210,6 +216,28 @@ onMounted(async () => {
           onblur="this.style.borderColor='var(--line)'"
         />
         <p class="text-xs text-faint mt-1">Path to the folder where WoT saves replay files (.wotreplay)</p>
+      </div>
+      <div class="mt-4 pt-4 border-t border-line flex items-center justify-between">
+        <div>
+          <p class="text-sm text-muted">Auto-refresh</p>
+          <p class="text-xs text-faint mt-0.5">Scan for new replays automatically every 30 seconds</p>
+        </div>
+        <button
+          @click="form.autoRefresh = !form.autoRefresh"
+          :class="[
+            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
+            form.autoRefresh ? 'bg-gold/80' : 'bg-line',
+          ]"
+          role="switch"
+          :aria-checked="form.autoRefresh"
+        >
+          <span
+            :class="[
+              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+              form.autoRefresh ? 'translate-x-6' : 'translate-x-1',
+            ]"
+          />
+        </button>
       </div>
     </div>
 

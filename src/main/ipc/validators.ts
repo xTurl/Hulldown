@@ -38,5 +38,6 @@ export function assertConfig(data: unknown): AppConfig {
     username: typeof d.username === 'string' ? d.username : '',
     region: typeof d.region === 'string' ? d.region : 'EU',
     replaysDir: typeof d.replaysDir === 'string' ? d.replaysDir : '',
+    autoRefresh: typeof d.autoRefresh === 'boolean' ? d.autoRefresh : true,
   };
 }

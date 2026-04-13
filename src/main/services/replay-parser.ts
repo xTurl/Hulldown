@@ -250,12 +250,23 @@ export interface ScanResult {
   errors: number;
 }
 
+/**
+ * WoT names replays like "20250120_1543_usa-M48A5_42_karelia.wotreplay".
+ * Returns the timestamp encoded in the filename, or 0 if the pattern doesn't match.
+ */
+function extractFilenameDate(filename: string): number {
+  const m = filename.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})_/);
+  if (!m) return 0;
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
+}
+
 export async function scanReplays(
   replayDir: string,
   accountId: number,
   playerName: string,
   knownArenaIds: Set<string>,
   onBatch: (battles: (ParsedBattle & { accountId: number })[]) => void,
+  sinceMs?: number,
 ): Promise<ScanResult> {
   const result: ScanResult = { added: 0, skipped: 0, errors: 0 };
   let files: string[];
@@ -267,9 +278,22 @@ export async function scanReplays(
     return result;
   }
 
+  // Incremental scan: sort newest-first by the date in the filename and stop
+  // once we reach files older than sinceMs. This avoids parsing thousands of
+  // already-known replay files on every auto-refresh tick.
+  if (sinceMs !== undefined) {
+    files.sort((a, b) => extractFilenameDate(b) - extractFilenameDate(a));
+  }
+
   const batch: (ParsedBattle & { accountId: number })[] = [];
 
   for (const file of files) {
+    if (sinceMs !== undefined) {
+      const fileDate = extractFilenameDate(file);
+      // fileDate === 0 means we couldn't parse the name — skip the date check for that file
+      if (fileDate !== 0 && fileDate < sinceMs) break;
+    }
+
     const parsed = parseReplay(path.join(replayDir, file));
     if (!parsed) { result.errors++; continue; }
     if (knownArenaIds.has(parsed.arenaId)) { result.skipped++; continue; }
