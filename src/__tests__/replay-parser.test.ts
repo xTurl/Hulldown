@@ -5,10 +5,11 @@ import type { DetectedPlayer } from '../main/services/replay-parser';
 // fs mock — must be hoisted before importing the module under test
 // ---------------------------------------------------------------------------
 
-const mockReaddirSync = vi.fn<() => string[]>();
-const mockOpenSync    = vi.fn<() => number>();
-const mockReadSync    = vi.fn<() => number>();
-const mockCloseSync   = vi.fn<() => void>();
+const mockReaddirSync  = vi.fn<() => string[]>();
+const mockReaddirAsync = vi.fn<() => Promise<string[]>>();
+const mockOpenSync     = vi.fn<() => number>();
+const mockReadSync     = vi.fn<() => number>();
+const mockCloseSync    = vi.fn<() => void>();
 
 vi.mock('fs', () => ({
   default: {
@@ -16,6 +17,9 @@ vi.mock('fs', () => ({
     openSync:    (...args: unknown[]) => mockOpenSync(...(args as [])),
     readSync:    (...args: unknown[]) => mockReadSync(...(args as [])),
     closeSync:   (...args: unknown[]) => mockCloseSync(...(args as [])),
+    promises: {
+      readdir: (...args: unknown[]) => mockReaddirAsync(...(args as [])),
+    },
   },
 }));
 
@@ -299,7 +303,9 @@ describe('scanReplays — player filtering', () => {
    * Simulate a directory with `replays` list. Each entry is [filename, buffer].
    */
   function setupDir(entries: Array<{ name: string; buf: Buffer }>): void {
-    mockReaddirSync.mockReturnValue(entries.map(e => e.name));
+    const names = entries.map(e => e.name);
+    mockReaddirSync.mockReturnValue(names);
+    mockReaddirAsync.mockResolvedValue(names);
 
     const bufMap = new Map(entries.map(e => [e.name, e.buf]));
 
@@ -339,69 +345,69 @@ describe('scanReplays — player filtering', () => {
     });
   }
 
-  it('should add replay when playerAccountId matches accountId', () => {
+  it('should add replay when playerAccountId matches accountId', async () => {
     const MY_ID = 112233;
     const buf = makeReplay(MY_ID, 'arena-1');
     setupDir([{ name: '2026-01-01_battle.wotreplay', buf }]);
 
     const batches: unknown[] = [];
-    const result = scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
 
     expect(result.added).toBe(1);
     expect(result.skipped).toBe(0);
     expect(batches.length).toBe(1);
   });
 
-  it('should skip replay when playerAccountId does not match accountId', () => {
+  it('should skip replay when playerAccountId does not match accountId', async () => {
     const MY_ID    = 112233;
     const OTHER_ID = 999999;
     const buf = makeReplay(OTHER_ID, 'arena-other');
     setupDir([{ name: '2026-01-01_other.wotreplay', buf }]);
 
     const batches: unknown[] = [];
-    const result = scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(1);
     expect(batches.length).toBe(0);
   });
 
-  it('should add replay when playerAccountId is undefined (old replays without playerID)', () => {
+  it('should add replay when playerAccountId is undefined (old replays without playerID)', async () => {
     const MY_ID = 112233;
     const buf = makeReplay(undefined, 'arena-old');
     setupDir([{ name: '2026-01-01_old.wotreplay', buf }]);
 
     const batches: unknown[] = [];
-    const result = scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
 
     // undefined playerAccountId means no filtering — replay should be included
     expect(result.added).toBe(1);
     expect(result.skipped).toBe(0);
   });
 
-  it('should skip replay whose arenaId is already in knownArenaIds', () => {
+  it('should skip replay whose arenaId is already in knownArenaIds', async () => {
     const MY_ID = 112233;
     const buf = makeReplay(MY_ID, 'known-arena');
     setupDir([{ name: '2026-01-01_known.wotreplay', buf }]);
 
     const knownArenaIds = new Set<string>(['known-arena']);
-    const result = scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, () => {});
+    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(1);
   });
 
-  it('should return empty result when replayDir does not exist', () => {
-    mockReaddirSync.mockImplementation(() => { throw new Error('ENOENT'); });
+  it('should return empty result when replayDir does not exist', async () => {
+    mockReaddirAsync.mockRejectedValue(new Error('ENOENT'));
 
-    const result = scanReplays('/nonexistent', 112233, 'Player', new Set(), () => {});
+    const result = await scanReplays('/nonexistent', 112233, 'Player', new Set(), () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(0);
     expect(result.errors).toBe(0);
   });
 
-  it('should correctly count multiple replays with mixed ownership', () => {
+  it('should correctly count multiple replays with mixed ownership', async () => {
     const MY_ID    = 112233;
     const OTHER_ID = 999999;
 
@@ -415,22 +421,24 @@ describe('scanReplays — player filtering', () => {
       { name: '2026-01-01_other.wotreplay',  buf: buf3 },
     ]);
 
-    const result = scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
+    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
 
     expect(result.added).toBe(2);
     expect(result.skipped).toBe(1);
   });
 
-  it('should exclude temp.wotreplay and replay_last_battle.wotreplay from directory listing', () => {
+  it('should exclude temp.wotreplay and replay_last_battle.wotreplay from directory listing', async () => {
     // These files are excluded by the filter in scanReplays before parsing
     const MY_ID = 112233;
     const buf = makeReplay(MY_ID, 'arena-good');
 
-    mockReaddirSync.mockReturnValue([
+    const fileList = [
       'temp.wotreplay',
       'replay_last_battle.wotreplay',
       '2026-01-01_real.wotreplay',
-    ]);
+    ];
+    mockReaddirSync.mockReturnValue(fileList);
+    mockReaddirAsync.mockResolvedValue(fileList);
 
     // Only the real replay gets read
     let openCallCount = 0;
@@ -444,7 +452,7 @@ describe('scanReplays — player filtering', () => {
     );
     mockCloseSync.mockReturnValue(undefined);
 
-    const result = scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
+    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
 
     expect(openCallCount).toBe(1); // only the real replay was opened
     expect(result.added).toBe(1);
@@ -565,7 +573,7 @@ describe('detectAllPlayersFromReplays', () => {
     expect(result[0].accountId).toBe(555);
   });
 
-  it('should skip replays that lack playerID, playerName, or serverName', () => {
+  it('should skip replays that lack playerName or serverName', () => {
     setupDetectDir([
       { name: '2026-01-01_no-id.wotreplay',   block0: { playerName: 'Ghost', serverName: 'EU1' } },
       { name: '2026-01-02_no-name.wotreplay',  block0: { playerID: 777, serverName: 'EU1' } },
@@ -574,8 +582,17 @@ describe('detectAllPlayersFromReplays', () => {
 
     const result = detectAllPlayersFromReplays('/replays');
 
-    expect(result).toHaveLength(1);
-    expect(result[0].accountId).toBe(888);
+    // playerID is optional; only playerName and serverName are required
+    // File 1: Ghost (no playerID but has playerName + serverName) -> included
+    // File 2: no playerName -> skipped
+    // File 3: Valid with playerID -> included
+    expect(result).toHaveLength(2);
+    const ghostPlayer = result.find(p => p.playerName === 'Ghost');
+    const validPlayer = result.find(p => p.playerName === 'Valid');
+    expect(ghostPlayer).toBeDefined();
+    expect(ghostPlayer?.accountId).toBeNull(); // no playerID
+    expect(validPlayer).toBeDefined();
+    expect(validPlayer?.accountId).toBe(888);
   });
 
   it('should skip temp.wotreplay', () => {

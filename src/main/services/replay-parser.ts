@@ -250,17 +250,18 @@ export interface ScanResult {
   errors: number;
 }
 
-export function scanReplays(
+export async function scanReplays(
   replayDir: string,
   accountId: number,
   playerName: string,
   knownArenaIds: Set<string>,
   onBatch: (battles: (ParsedBattle & { accountId: number })[]) => void,
-): ScanResult {
+): Promise<ScanResult> {
   const result: ScanResult = { added: 0, skipped: 0, errors: 0 };
   let files: string[];
   try {
-    files = fs.readdirSync(replayDir)
+    const allFiles = await fs.promises.readdir(replayDir);
+    files = allFiles
       .filter(f => f.endsWith('.wotreplay') && f !== 'temp.wotreplay' && f !== 'replay_last_battle.wotreplay');
   } catch {
     return result;

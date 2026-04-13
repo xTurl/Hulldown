@@ -62,7 +62,11 @@ async function openUpdate() {
       <template v-else>
         <Sidebar />
         <main class="flex-1 overflow-y-auto">
-          <router-view />
+          <router-view v-slot="{ Component }">
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
+          </router-view>
         </main>
       </template>
     </div>

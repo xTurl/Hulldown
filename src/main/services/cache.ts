@@ -26,6 +26,8 @@ function getDb(): Database.Database {
   if (!db) {
     const dbPath = path.join(app.getPath('userData'), 'cache.db');
     db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = NORMAL');
     db.exec(`
       CREATE TABLE IF NOT EXISTS tank_details (
         tank_id INTEGER PRIMARY KEY,
@@ -145,6 +147,7 @@ export function clearAll(): void {
 
 export function clearBattles(accountId: number): void {
   getDb().prepare('DELETE FROM battles WHERE account_id = ?').run(accountId);
+  knownArenaIdsCache.delete(accountId);
 }
 
 export function getProgressSnapshots(accountId: number): ProgressSnapshot[] {
@@ -175,11 +178,24 @@ export function saveProgressSnapshot(snapshot: Omit<ProgressSnapshot, 'id'> & { 
     );
 }
 
+// In-memory cache: avoids re-fetching all 16k arena IDs from DB on every scan cycle.
+// Populated lazily on first call per account; updated incrementally after each insertBattles.
+const knownArenaIdsCache = new Map<number, Set<string>>();
+
 export function getKnownArenaIds(accountId: number): Set<string> {
+  const cached = knownArenaIdsCache.get(accountId);
+  if (cached) return cached;
   const rows = getDb()
     .prepare('SELECT arena_id FROM battles WHERE account_id = ?')
     .all(accountId) as { arena_id: string }[];
-  return new Set(rows.map(r => r.arena_id));
+  const set = new Set(rows.map(r => r.arena_id));
+  knownArenaIdsCache.set(accountId, set);
+  return set;
+}
+
+/** Force a full DB reload for an account on the next getKnownArenaIds call. */
+export function invalidateKnownArenaIds(accountId: number): void {
+  knownArenaIdsCache.delete(accountId);
 }
 
 /**
@@ -279,6 +295,12 @@ export function insertBattles(battles: import('../types').BattleRecord[]): void 
     }
   });
   insertMany(battles);
+  // Update the in-memory knownIds cache so the next scan doesn't re-query the DB.
+  // INSERT OR IGNORE means duplicates are silently dropped; adding to a Set is idempotent.
+  for (const b of battles) {
+    const cached = knownArenaIdsCache.get(b.accountId);
+    if (cached) cached.add(b.arenaId);
+  }
 }
 
 export function getBattles(accountId: number, limit = 10, offset = 0): import('../types').BattleRecord[] {
@@ -461,13 +483,25 @@ export function getReplayTankContext(
   };
 }
 
+// TODO(perf): Replace the window-function approach with a session_id column populated at
+// INSERT time. This would eliminate the full-table scan entirely. Deferred because it requires
+// a schema migration and access to prev played_at during insertBattles.
 export function getSessions(accountId: number, limit = 20): SessionSummary[] {
+  // Cap the CTE at the most recent 2000 battles so the LAG+SUM window function never
+  // scans all 16k rows just to return `limit` sessions. 2000 battles covers ~100 sessions
+  // comfortably even for very long sessions, and the outer LIMIT ? keeps the final result small.
+  const CTE_LIMIT = 2000;
   return getDb().prepare(`
-    WITH ordered AS (
+    WITH recent AS (
       SELECT played_at, result, damage, kills, net_credits,
-             spotted, dropped_capture, assist,
-             LAG(played_at) OVER (ORDER BY played_at) as prev_at
+             spotted, dropped_capture, assist
       FROM battles WHERE account_id = ? AND result != 'incomplete'
+      ORDER BY played_at DESC LIMIT ${CTE_LIMIT}
+    ),
+    ordered AS (
+      SELECT *,
+             LAG(played_at) OVER (ORDER BY played_at) as prev_at
+      FROM recent
     ),
     with_session AS (
       SELECT *,

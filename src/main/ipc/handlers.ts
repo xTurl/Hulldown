@@ -409,11 +409,11 @@ export function registerHandlers(): void {
     cacheService.clearBattles(config.accountId);
   });
 
-  handle('replays:scan', () => {
+  handle('replays:scan', async () => {
     const config = configService.getConfig();
     if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
     const knownIds = cacheService.getKnownArenaIds(config.accountId);
-    const result = replayParser.scanReplays(
+    const result = await replayParser.scanReplays(
       config.replaysDir,
       config.accountId,
       config.username,
