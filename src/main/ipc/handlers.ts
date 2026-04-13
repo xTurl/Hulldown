@@ -434,24 +434,43 @@ export function registerHandlers(): void {
     // under its real arenaUniqueID; clean up the stale partial_ counterparts.
     cacheService.cleanupPartialBattles(config.accountId);
 
-    // Windows fix: WoT does not rewrite the dated replay file for battles the
-    // player left early — only temp.wotreplay gets block1 appended when the
-    // battle ends on the server. Try to resolve any remaining partial battles
-    // by matching them against temp.wotreplay.
+    // Re-parse any remaining partial battles by reading their original .wotreplay files.
+    // The incremental scan's filename-date filter skips files whose name timestamp has moved
+    // outside the 2-minute safety window, even if WoT has since appended block1 to them.
+    // Reading them directly here costs one stat+read per pending partial — negligible.
     const partials = cacheService.getPartialBattles(config.accountId);
     if (partials.length > 0) {
-      const tempPath = path.join(config.replaysDir, 'temp.wotreplay');
-      const tempParsed = replayParser.parseReplay(tempPath);
-      if (tempParsed && tempParsed.result !== 'incomplete') {
-        for (const partial of partials) {
-          if (partial.tankKey === tempParsed.tankKey && partial.playedAt === tempParsed.playedAt) {
-            cacheService.resolvePartialBattle(config.accountId, partial.arenaId, {
-              ...tempParsed,
-              id: 0,
-              accountId: config.accountId,
-            } as BattleRecord);
-            result.added++;
-            break;
+      for (const partial of partials) {
+        const filename = partial.arenaId.slice('partial_'.length);
+        const filePath = path.join(config.replaysDir, `${filename}.wotreplay`);
+        const reParsed = replayParser.parseReplay(filePath);
+        if (reParsed && reParsed.result !== 'incomplete') {
+          cacheService.resolvePartialBattle(config.accountId, partial.arenaId, {
+            ...reParsed,
+            id: 0,
+            accountId: config.accountId,
+          } as BattleRecord);
+          result.added++;
+        }
+      }
+
+      // Fallback: if WoT did not rewrite the dated file (observed on some Windows setups),
+      // check temp.wotreplay — WoT appends block1 there when the server battle ends.
+      const stillPartials = cacheService.getPartialBattles(config.accountId);
+      if (stillPartials.length > 0) {
+        const tempPath = path.join(config.replaysDir, 'temp.wotreplay');
+        const tempParsed = replayParser.parseReplay(tempPath);
+        if (tempParsed && tempParsed.result !== 'incomplete') {
+          for (const partial of stillPartials) {
+            if (partial.tankKey === tempParsed.tankKey && partial.playedAt === tempParsed.playedAt) {
+              cacheService.resolvePartialBattle(config.accountId, partial.arenaId, {
+                ...tempParsed,
+                id: 0,
+                accountId: config.accountId,
+              } as BattleRecord);
+              result.added++;
+              break;
+            }
           }
         }
       }

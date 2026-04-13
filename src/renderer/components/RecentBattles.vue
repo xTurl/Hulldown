@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { getWn8Color } from '../../shared/utils/wn8';
 import { normalizeMapName } from '../../shared/utils/mapNames';
+import { useConfigStore } from '../stores/config';
 import iconLight from '../assets/light.png';
 import iconLightPremium from '../assets/light_premium.png';
 import iconMedium from '../assets/medium.png';
@@ -30,6 +31,8 @@ function tankTypeIcon(b: BattleRecord): string | null {
 
 // Fallback local calculation used only when main process hasn't enriched the battle
 // (e.g. WN8 expected values not yet fetched or this is the first scan)
+
+const configStore = useConfigStore();
 
 const PAGE_SIZE = 10;
 
@@ -82,12 +85,13 @@ onMounted(async () => {
   [totalCount.value] = await Promise.all([window.api.getBattlesCount()]);
   await loadPage(0);
   await scan();
-  const cfg = await window.api.getConfig();
-  if (cfg.autoRefresh !== false) {
-    autoRefreshTimer = setInterval(() => {
-      if (!scanning.value) scan(true);
-    }, 30_000);
-  }
+  // Always start the interval; check the live config store on each tick so that
+  // toggling autoRefresh in Settings takes effect immediately without a restart.
+  // <keep-alive> keeps this component alive across navigation, so a one-time mount
+  // check would lock in the setting from the moment the app first opened.
+  autoRefreshTimer = setInterval(() => {
+    if (!scanning.value && configStore.config?.autoRefresh !== false) scan(true);
+  }, 30_000);
 });
 
 onUnmounted(() => {
