@@ -79,7 +79,20 @@ function getDb(): Database.Database {
         achievements TEXT NOT NULL DEFAULT '[]',
         UNIQUE(account_id, arena_id)
       );
-      CREATE INDEX IF NOT EXISTS idx_battles_account_played ON battles(account_id, played_at DESC);
+      CREATE TABLE IF NOT EXISTS scan_state (
+        account_id INTEGER PRIMARY KEY,
+        last_scan_at INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS wg_data_cache (
+        account_id INTEGER PRIMARY KEY,
+        tank_stats TEXT NOT NULL,
+        encyclopedia TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_battles_account_played   ON battles(account_id, played_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_battles_account_tank     ON battles(account_id, tank_key);
+      CREATE INDEX IF NOT EXISTS idx_battles_account_map      ON battles(account_id, map_name);
+      CREATE INDEX IF NOT EXISTS idx_battles_account_arena_id ON battles(account_id, arena_id);
     `);
     // Migrations — safe to run every startup
     const psColumns = (db.prepare('PRAGMA table_info(progress_snapshots)').all() as { name: string }[]).map(c => c.name);
@@ -142,7 +155,7 @@ export function clearPlayerInfoCache(): void {
 }
 
 export function clearAll(): void {
-  getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots;');
+  getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots; DELETE FROM wg_data_cache;');
 }
 
 export function clearBattles(accountId: number): void {
@@ -523,6 +536,41 @@ export function getSessions(accountId: number, limit = 20): SessionSummary[] {
     FROM with_session
     GROUP BY session_num ORDER BY session_num DESC LIMIT ?
   `).all(accountId, limit) as SessionSummary[];
+}
+
+export function getWgDataCache(accountId: number): { tankStats: unknown; encyclopedia: unknown; updatedAt: number } | null {
+  const row = getDb()
+    .prepare('SELECT tank_stats, encyclopedia, updated_at FROM wg_data_cache WHERE account_id = ?')
+    .get(accountId) as { tank_stats: string; encyclopedia: string; updated_at: number } | undefined;
+  if (!row) return null;
+  return {
+    tankStats:   JSON.parse(row.tank_stats),
+    encyclopedia: JSON.parse(row.encyclopedia),
+    updatedAt:   row.updated_at,
+  };
+}
+
+export function saveWgDataCache(accountId: number, tankStats: unknown, encyclopedia: unknown): void {
+  getDb()
+    .prepare('INSERT OR REPLACE INTO wg_data_cache (account_id, tank_stats, encyclopedia, updated_at) VALUES (?, ?, ?, ?)')
+    .run(accountId, JSON.stringify(tankStats), JSON.stringify(encyclopedia), Date.now());
+}
+
+export function clearWgDataCache(accountId: number): void {
+  getDb().prepare('DELETE FROM wg_data_cache WHERE account_id = ?').run(accountId);
+}
+
+export function getLastScanTime(accountId: number): number {
+  const row = getDb()
+    .prepare('SELECT last_scan_at FROM scan_state WHERE account_id = ?')
+    .get(accountId) as { last_scan_at: number } | undefined;
+  return row?.last_scan_at ?? 0;
+}
+
+export function setLastScanTime(accountId: number, time: number): void {
+  getDb()
+    .prepare('INSERT OR REPLACE INTO scan_state (account_id, last_scan_at) VALUES (?, ?)')
+    .run(accountId, time);
 }
 
 export function backfillMissingWnx(wnx: number): void {

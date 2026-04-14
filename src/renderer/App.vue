@@ -5,7 +5,8 @@ import { usePlayerStore } from './stores/player';
 import { useThemeStore } from './stores/theme';
 import Sidebar from './components/Sidebar.vue';
 import Setup from './views/Setup.vue';
-import type { UpdateInfo } from '../../shared/types';
+import ScanToast from './components/ScanToast.vue';
+import type { UpdateInfo } from '../shared/types';
 
 // Initialize theme as early as possible
 useThemeStore();
@@ -57,6 +58,7 @@ async function openUpdate() {
       </div>
     </div>
 
+    <ScanToast />
     <div class="flex flex-1 overflow-hidden">
       <Setup v-if="needsSetup" @complete="onSetupComplete" />
       <template v-else>

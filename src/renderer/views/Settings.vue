@@ -4,12 +4,14 @@ import { useConfigStore } from '../stores/config';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
 import { useThemeStore, type ThemeMode } from '../stores/theme';
+import { useScanStore } from '../stores/scan';
 import type { AppConfig, CacheStats } from '../../shared/types';
 
 const configStore = useConfigStore();
 const playerStore = usePlayerStore();
 const tanksStore = useTanksStore();
 const themeStore = useThemeStore();
+const scanStore = useScanStore();
 
 const form = ref<AppConfig>({
   claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '', autoRefresh: true,
@@ -87,11 +89,17 @@ async function clearCache() {
 async function clearAndRescanBattles() {
   clearingBattles.value = true;
   battlesCleared.value = false;
-  await window.api.clearBattles();
-  await window.api.scanReplays();
-  battlesCleared.value = true;
-  clearingBattles.value = false;
-  setTimeout(() => battlesCleared.value = false, 4000);
+  scanStore.start();
+  try {
+    await window.api.clearBattles();
+    await window.api.scanReplays();
+    battlesCleared.value = true;
+    scanStore.markDirty();
+    setTimeout(() => battlesCleared.value = false, 4000);
+  } finally {
+    clearingBattles.value = false;
+    scanStore.stop();
+  }
 }
 
 onMounted(async () => {

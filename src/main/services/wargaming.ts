@@ -75,7 +75,7 @@ export async function getPlayerTankStats(accountId: number, apiKey: string, regi
   const base = getBaseUrl(region);
   const data = await fetchJson(
     buildUrl(`${base}/tanks/stats/`, { application_id: apiKey, account_id: accountId }),
-    15000,
+    30000,
   ) as Record<string, unknown>;
   if (data.status === 'error') throw new Error((data.error as Record<string, unknown>).message as string);
   return ((data.data as Record<string, unknown>)[accountId.toString()] as WgTankStat[]) || [];
@@ -134,7 +134,7 @@ export async function getVehicleEncyclopedia(apiKey: string, region: string, tan
   if (tankIds && tankIds.length > 0) {
     params.tank_id = tankIds.join(',');
   }
-  const data = await fetchJson(buildUrl(`${base}/encyclopedia/vehicles/`, params), 15000) as Record<string, unknown>;
+  const data = await fetchJson(buildUrl(`${base}/encyclopedia/vehicles/`, params), 30000) as Record<string, unknown>;
   if (data.status === 'error') throw new Error((data.error as Record<string, unknown>).message as string);
   return data.data as Record<number, WgVehicle>;
 }

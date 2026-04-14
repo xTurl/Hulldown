@@ -185,7 +185,7 @@ onMounted(async () => {
         style="background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold)44"
       >
         <span :class="syncing ? 'animate-spin inline-block' : ''">↻</span>
-        {{ syncing ? 'Syncing...' : 'Sync' }}
+        {{ syncing ? 'Syncing...' : 'Sync WG Data' }}
       </button>
     </div>
 
@@ -246,7 +246,7 @@ onMounted(async () => {
           </div>
           <div v-else class="px-5 py-8 text-center">
             <p class="text-sm text-muted">No progress data yet</p>
-            <p class="text-xs text-faint mt-1">Click "Sync" a few times after playing to see your progress chart.</p>
+            <p class="text-xs text-faint mt-1">Click "Sync WG Data" a few times after playing to see your progress chart.</p>
           </div>
         </div>
       </div>

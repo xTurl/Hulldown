@@ -206,8 +206,9 @@ export function detectAllPlayersFromReplays(replayDir: string): DetectedPlayer[]
 
   const seen = new Map<string, DetectedPlayer>();
 
-  // Scan all replay files to detect all unique players (not limited to 200)
-  for (const file of files) {
+  // Cap to the 2000 most recent files — enough to cover all realistic multi-account
+  // setups while avoiding a blocking scan of 100k+ files on large replay libraries.
+  for (const file of files.slice(0, 2000)) {
     let fd = -1;
     try {
       fd = fs.openSync(path.join(replayDir, file), 'r');
@@ -311,6 +312,9 @@ export async function scanReplays(
     if (batch.length >= 100) {
       onBatch([...batch]);
       batch.length = 0;
+      // Yield the event loop so the Electron main thread stays responsive
+      // during large initial scans (100k+ files would freeze the UI otherwise).
+      await new Promise<void>(resolve => setImmediate(resolve));
     }
   }
 

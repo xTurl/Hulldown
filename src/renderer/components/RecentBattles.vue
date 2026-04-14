@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, onActivated } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { getWn8Color } from '../../shared/utils/wn8';
 import { normalizeMapName } from '../../shared/utils/mapNames';
 import { useConfigStore } from '../stores/config';
+import { useScanStore } from '../stores/scan';
 import iconLight from '../assets/light.png';
 import iconLightPremium from '../assets/light_premium.png';
 import iconMedium from '../assets/medium.png';
@@ -33,6 +34,7 @@ function tankTypeIcon(b: BattleRecord): string | null {
 // (e.g. WN8 expected values not yet fetched or this is the first scan)
 
 const configStore = useConfigStore();
+const scanStore = useScanStore();
 
 const PAGE_SIZE = 10;
 
@@ -64,6 +66,7 @@ const emit = defineEmits<{ scanned: [] }>();
 
 async function scan(quick = false) {
   scanning.value = true;
+  scanStore.start();
   newCount.value = 0;
   try {
     const result = await window.api.scanReplays(quick);
@@ -74,6 +77,7 @@ async function scan(quick = false) {
     }
   } finally {
     scanning.value = false;
+    scanStore.stop();
     emit('scanned');
   }
 }
@@ -81,6 +85,7 @@ async function scan(quick = false) {
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
+  scanStore.start();
   loading.value = true;
   [totalCount.value] = await Promise.all([window.api.getBattlesCount()]);
   await loadPage(0);
@@ -96,6 +101,13 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (autoRefreshTimer !== null) clearInterval(autoRefreshTimer);
+});
+
+onActivated(async () => {
+  if (!scanStore.dirty) return;
+  scanStore.clearDirty();
+  totalCount.value = await window.api.getBattlesCount();
+  await loadPage(0);
 });
 
 defineExpose({ scan });

@@ -72,6 +72,21 @@ async function getWgData(config: ReturnType<typeof configService.getConfig>) {
   if (memTankStats && memEncyclopedia && Date.now() - memFetchedAt < ONE_HOUR) {
     return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
   }
+
+  // Check SQLite cache before hitting the network — survives app restarts.
+  // This eliminates the 2-5s WG API wait on every launch after the first.
+  if (!memTankStats || !memEncyclopedia) {
+    const sqliteCache = cacheService.getWgDataCache(config.accountId);
+    if (sqliteCache && Date.now() - sqliteCache.updatedAt < ONE_HOUR) {
+      memTankStats    = sqliteCache.tankStats as wgService.WgTankStat[];
+      memEncyclopedia = sqliteCache.encyclopedia as Record<number, wgService.WgVehicle>;
+      memFetchedAt    = sqliteCache.updatedAt;
+      memNameToTankId = new Map(Object.values(memEncyclopedia).map(v => [v.name, v.tank_id]));
+      memTagToTankId  = new Map(Object.values(memEncyclopedia).map(v => [v.tag,  v.tank_id]));
+      return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
+    }
+  }
+
   // Return the in-flight promise if a fetch is already running — prevents duplicate WG API
   // requests when multiple IPC handlers call getWgData concurrently on a cold cache.
   if (pendingWgData) return pendingWgData;
@@ -88,6 +103,8 @@ async function getWgData(config: ReturnType<typeof configService.getConfig>) {
       // Build reverse lookups for battle enrichment
       memNameToTankId = new Map(Object.values(encyclopedia).map(v => [v.name, v.tank_id]));
       memTagToTankId  = new Map(Object.values(encyclopedia).map(v => [v.tag,  v.tank_id]));
+      // Persist to SQLite so the next startup skips the network call
+      cacheService.saveWgDataCache(config.accountId, tankStats, encyclopedia);
       return { tankStats, encyclopedia };
     } catch (e) {
       // Don't cache failed requests
@@ -234,9 +251,15 @@ export function registerHandlers(): void {
   handle('config:get', () => configService.getConfig());
 
   handle('config:save', (config) => {
+    const validated = assertConfig(config);
+    const prev = configService.getConfig();
     clearMemCache();
     cacheService.clearPlayerInfoCache();
-    configService.saveConfig(assertConfig(config));
+    // If the account changed, the cached WG data belongs to a different player
+    if (prev.accountId !== validated.accountId) {
+      cacheService.clearWgDataCache(prev.accountId);
+    }
+    configService.saveConfig(validated);
   });
 
   handle('player:search', (username, region) =>
@@ -410,16 +433,30 @@ export function registerHandlers(): void {
   handle('replays:clear', () => {
     const config = configService.getConfig();
     cacheService.clearBattles(config.accountId);
+    lastScanTime = 0;
+    cacheService.setLastScanTime(config.accountId, 0);
   });
 
   handle('replays:scan', async (quick) => {
     const config = configService.getConfig();
     if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
-    const knownIds = cacheService.getKnownArenaIds(config.accountId);
+    // Restore persisted scan time on first call after startup so that restarts
+    // don't force a full re-parse of every replay file in the library.
+    if (lastScanTime === 0) {
+      lastScanTime = cacheService.getLastScanTime(config.accountId);
+    }
     // Incremental scan: only parse replay files whose filename date is within a
     // 2-minute safety buffer of the last scan. This skips thousands of already-
     // known files and keeps the auto-refresh tick fast regardless of library size.
-    const sinceMs = (quick && lastScanTime > 0) ? lastScanTime - 2 * 60 * 1000 : undefined;
+    const sinceMs = lastScanTime > 0 ? lastScanTime - 2 * 60 * 1000 : undefined;
+    // For incremental scans, skip loading all arena IDs from SQLite — the filename-date
+    // filter already limits parsing to recent files, and INSERT OR IGNORE handles any
+    // accidental duplicates. Loading 100k+ IDs on every restart is what caused the
+    // 5-second startup delay. Only do the full load for genuine full scans (first run
+    // ever, or after the user clears the replay cache).
+    const knownIds = sinceMs !== undefined
+      ? new Set<string>()
+      : cacheService.getKnownArenaIds(config.accountId);
     const result = await replayParser.scanReplays(
       config.replaysDir,
       config.accountId,
@@ -429,6 +466,7 @@ export function registerHandlers(): void {
       sinceMs,
     );
     lastScanTime = Date.now();
+    cacheService.setLastScanTime(config.accountId, lastScanTime);
     // WoT rewrites replay files with full stats after battle end, even for
     // battles the player left early. The scan inserts the complete version
     // under its real arenaUniqueID; clean up the stale partial_ counterparts.
