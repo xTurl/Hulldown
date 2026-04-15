@@ -26,7 +26,11 @@ function sumCost(value: unknown): number {
 
 export function formatTankName(vehicleKey: string): string {
   // "uk-GB123_GSOR_1006_v7" or "sweden:S10_Strv_103_0_Series"
-  const withoutNation = vehicleKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '');
+  // Strip the trailing _v<N> version suffix that WG adds to replay vehicle keys
+  // when updating tank models — it is not part of the encyclopedia tag or name.
+  const withoutNation = vehicleKey
+    .replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '')
+    .replace(/_v\d+$/, '');
   const underscoreIdx = withoutNation.indexOf('_');
   if (underscoreIdx === -1) return withoutNation;
   return withoutNation.slice(underscoreIdx + 1).replace(/_/g, ' ');

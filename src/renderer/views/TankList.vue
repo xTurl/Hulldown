@@ -58,7 +58,7 @@ const playerAvgWr = computed(() => {
 });
 
 const playerAvgWn8 = computed(() => {
-  const tanks = tanksStore.tankList.filter(t => t.battles > 0);
+  const tanks = tanksStore.tankList.filter(t => t.battles > 0 && t.hasExpectedValues);
   if (tanks.length === 0) return 0;
   const totalBattles = tanks.reduce((s, t) => s + t.battles, 0);
   const totalWn8 = tanks.reduce((s, t) => s + t.wn8 * t.battles, 0);
@@ -69,7 +69,7 @@ const focusTanks = computed(() => {
   const avgWr = playerAvgWr.value;
   const avgWn8 = playerAvgWn8.value;
   return tanksStore.tankList
-    .filter(t => t.battles >= 50)
+    .filter(t => t.battles >= 50 && t.hasExpectedValues)
     .map(t => ({ ...t, wrDeficit: avgWr - t.winRate, wn8Deficit: avgWn8 - t.wn8 }))
     .filter(t => t.wrDeficit > 3 || t.wn8Deficit > 150)
     .sort((a, b) => (b.wrDeficit * 15 + b.wn8Deficit) - (a.wrDeficit * 15 + a.wn8Deficit));
@@ -214,8 +214,8 @@ onMounted(async () => {
                 <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(tank.winRate) }">
                   {{ tank.winRate.toFixed(1) }}%
                 </td>
-                <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wn8) }">
-                  {{ tank.wn8 }}
+                <td class="px-4 py-3 text-right text-sm font-bold" :style="tank.hasExpectedValues ? { color: getWn8Color(tank.wn8) } : {}">
+                  {{ tank.hasExpectedValues ? tank.wn8 : '—' }}
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex flex-col items-end gap-0.5">
@@ -264,10 +264,12 @@ onMounted(async () => {
               </td>
               <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.battles.toLocaleString('en-US') }}</td>
               <td class="px-4 py-3 text-right text-sm font-medium" :style="{ color: getWrColor(tank.winRate) }">{{ tank.winRate.toFixed(1) }}%</td>
-              <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wn8) }">{{ tank.wn8 }}</td>
-              <td class="px-4 py-3 text-right text-sm font-bold" :style="{ color: getWn8Color(tank.wnx) }">
-                {{ tank.wnx }}
-                <span v-if="tank.wnx > tank.wn8 + 20" class="text-xs text-gold ml-1">▲</span>
+              <td class="px-4 py-3 text-right text-sm font-bold" :style="tank.hasExpectedValues ? { color: getWn8Color(tank.wn8) } : {}">
+                {{ tank.hasExpectedValues ? tank.wn8 : '—' }}
+              </td>
+              <td class="px-4 py-3 text-right text-sm font-bold" :style="tank.hasExpectedValues ? { color: getWn8Color(tank.wnx) } : {}">
+                {{ tank.hasExpectedValues ? tank.wnx : '—' }}
+                <span v-if="tank.hasExpectedValues && tank.wnx > tank.wn8 + 20" class="text-xs text-gold ml-1">▲</span>
               </td>
               <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.avgDamage.toLocaleString('en-US') }}</td>
               <td class="px-4 py-3 text-right text-sm text-muted">{{ tank.survivalRate.toFixed(1) }}%</td>

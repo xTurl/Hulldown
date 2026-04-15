@@ -26,6 +26,7 @@ declare global {
       getTankMapStats(tankName: string): Promise<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]>;
       getBattles(limit?: number, offset?: number): Promise<BattleRecord[]>;
       getBattlesCount(): Promise<number>;
+      getRecentStats(limit?: number): Promise<{ wn8: number; wnx: number; battles: number }>;
       getMapStats(sinceMs?: number): Promise<ReplayMapStat[]>;
       getTankRecentStats(sinceMs?: number): Promise<ReplayTankStat[]>;
       getEconomy(days?: number): Promise<EconomyDay[]>;

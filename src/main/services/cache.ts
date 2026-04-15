@@ -330,6 +330,37 @@ export function getBattlesCount(accountId: number): number {
   return row.count;
 }
 
+export interface RecentTankGroup {
+  tankKey: string;
+  battles: number;
+  wins: number;
+  damage: number;
+  kills: number;
+  spotted: number;
+  dropped: number;
+  assist: number;
+}
+
+export function getRecentBattlesByTank(accountId: number, limit: number): RecentTankGroup[] {
+  return getDb().prepare(`
+    WITH recent AS (
+      SELECT * FROM battles
+      WHERE account_id = ? AND result != 'incomplete'
+      ORDER BY played_at DESC LIMIT ?
+    )
+    SELECT tank_key as tankKey,
+           COUNT(*) as battles,
+           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
+           SUM(damage) as damage,
+           SUM(kills) as kills,
+           SUM(spotted) as spotted,
+           SUM(dropped_capture) as dropped,
+           SUM(assist) as assist
+    FROM recent
+    GROUP BY tank_key
+  `).all(accountId, limit) as RecentTankGroup[];
+}
+
 export interface ReplayMapStat {
   mapName: string; battles: number; wins: number; winRate: number;
   avgDamage: number; avgKills: number; avgAssist: number; avgSpotted: number;

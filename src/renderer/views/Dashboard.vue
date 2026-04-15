@@ -21,6 +21,7 @@ const syncing = ref(false);
 const progress = ref<ProgressSnapshot[]>([]);
 const recentBattlesRef = useTemplateRef<{ scan: () => Promise<void> }>('recentBattles');
 const sessionRefreshKey = ref(0);
+const recentStats = ref<{ wn8: number; wnx: number; battles: number } | null>(null);
 const selectedMetric = ref<'wn8' | 'wnx' | 'wr'>('wn8');
 
 const winRate = computed(() => {
@@ -158,12 +159,18 @@ async function sync() {
     recentBattlesRef.value?.scan(),
   ]);
   await playerStore.fetchPlayerInfo();
-  progress.value = await window.api.getProgress();
+  [progress.value, recentStats.value] = await Promise.all([
+    window.api.getProgress(),
+    window.api.getRecentStats(),
+  ]);
   syncing.value = false;
 }
 
 onMounted(async () => {
-  progress.value = await window.api.getProgress();
+  [progress.value, recentStats.value] = await Promise.all([
+    window.api.getProgress(),
+    window.api.getRecentStats(),
+  ]);
   if (tanksStore.tankList.length === 0) {
     await tanksStore.fetchTankList();
   }
@@ -204,8 +211,18 @@ onMounted(async () => {
         <div v-if="playerStore.playerInfo" class="grid grid-cols-2 gap-3">
           <StatCard title="Total battles" :value="playerStore.playerInfo.statistics.battles.toLocaleString('en-US')" subtitle="all tanks" />
           <StatCard title="Win Rate" :value="winRate" :color="getWrColor(parseFloat(winRate))" />
-          <StatCard title="WN8" :value="overallWn8" :color="getWn8Color(overallWn8)" />
-          <StatCard title="WNX" :value="overallWnx" :color="getWn8Color(overallWnx)" subtitle="with assist" />
+          <StatCard
+            title="WN8"
+            :value="overallWn8"
+            :color="getWn8Color(overallWn8)"
+            :subtitle="recentStats && recentStats.wn8 > 0 ? `Recent ${recentStats.battles.toLocaleString('en-US')}: ${recentStats.wn8}` : undefined"
+          />
+          <StatCard
+            title="WNX"
+            :value="overallWnx"
+            :color="getWn8Color(overallWnx)"
+            :subtitle="recentStats && recentStats.wnx > 0 ? `Recent ${recentStats.battles.toLocaleString('en-US')}: ${recentStats.wnx}` : 'with assist'"
+          />
         </div>
         <div v-else-if="playerStore.loading" class="grid grid-cols-2 gap-3">
           <div v-for="i in 4" :key="i" class="bg-card border border-line rounded-xl p-4 animate-pulse">

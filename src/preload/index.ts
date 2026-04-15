@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('api', {
   scanReplays: (quick?: boolean): Promise<{ added: number; skipped: number; errors: number }> => ipcRenderer.invoke('replays:scan', quick),
   getBattles: (limit?: number, offset?: number): Promise<BattleRecord[]> => ipcRenderer.invoke('replays:list', limit, offset),
   getBattlesCount: (): Promise<number> => ipcRenderer.invoke('replays:count'),
+  getRecentStats: (limit?: number): Promise<{ wn8: number; wnx: number; battles: number }> => ipcRenderer.invoke('replays:recent-stats', limit),
   getMapStats: (sinceMs?: number): Promise<import('../main/services/cache').ReplayMapStat[]> => ipcRenderer.invoke('replays:map-stats', sinceMs),
   getTankRecentStats: (sinceMs?: number): Promise<import('../main/services/cache').ReplayTankStat[]> => ipcRenderer.invoke('replays:tank-stats', sinceMs),
   getEconomy: (days?: number): Promise<import('../main/services/cache').EconomyDay[]> => ipcRenderer.invoke('replays:economy', days),

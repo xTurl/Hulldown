@@ -186,12 +186,17 @@ onMounted(loadTank);
       <!-- Stat cards -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <StatCard title="Win Rate" :value="tank.winRate.toFixed(1) + '%'" :color="getWrColor(tank.winRate)" />
-        <StatCard title="WN8" :value="tank.wn8" :color="getWn8Color(tank.wn8)" subtitle="direct dmg only" />
+        <StatCard
+          title="WN8"
+          :value="tank.hasExpectedValues ? tank.wn8 : '—'"
+          :color="tank.hasExpectedValues ? getWn8Color(tank.wn8) : undefined"
+          :subtitle="tank.hasExpectedValues ? 'direct dmg only' : 'no expected values yet'"
+        />
         <StatCard
           title="WNX"
-          :value="tank.wnx"
-          :color="getWn8Color(tank.wnx)"
-          :subtitle="tank.wnx > tank.wn8 ? `+${tank.wnx - tank.wn8} vs WN8` : 'with assisted dmg'"
+          :value="tank.hasExpectedValues ? tank.wnx : '—'"
+          :color="tank.hasExpectedValues ? getWn8Color(tank.wnx) : undefined"
+          :subtitle="tank.hasExpectedValues ? (tank.wnx > tank.wn8 ? `+${tank.wnx - tank.wn8} vs WN8` : 'with assisted dmg') : 'no expected values yet'"
         />
         <StatCard title="Avg Damage" :value="tank.avgDamage.toLocaleString('en-US')" />
       </div>
@@ -233,8 +238,8 @@ onMounted(loadTank);
               ['Battles', tank.battles.toLocaleString('en-US')],
               ['Wins', tank.wins.toLocaleString('en-US')],
               ['Win Rate', tank.winRate.toFixed(1) + '%'],
-              ['WN8 (direct dmg)', tank.wn8],
-              ['WNX (with assisted)', tank.wnx],
+              ['WN8 (direct dmg)', tank.hasExpectedValues ? tank.wn8 : '—'],
+              ['WNX (with assisted)', tank.hasExpectedValues ? tank.wnx : '—'],
               ['Avg damage (direct)', tank.avgDamage.toLocaleString('en-US')],
               ['Avg spotting (radio)', tank.avgDamageAssisted.toLocaleString('en-US')],
               ['Avg tracking', tank.avgDamageAssistedTrack.toLocaleString('en-US')],

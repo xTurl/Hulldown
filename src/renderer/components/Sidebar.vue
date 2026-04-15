@@ -44,7 +44,7 @@ const navItems = [
   },
   {
     path: '/patches',
-    label: 'Updates',
+    label: 'WoT Updates',
     // Download cloud / arrow down into box
     icon: '<polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0018 9h-1.26A8 8 0 103 16.29"/>',
   },
@@ -318,7 +318,7 @@ async function switchPlayer(player: DetectedPlayer) {
           </div>
           <button
             v-for="p in detectedPlayers"
-            :key="p.accountId"
+            :key="p.accountId ?? p.playerName"
             @click.stop="switchPlayer(p)"
             class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-sub transition-colors text-left"
           >

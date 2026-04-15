@@ -41,7 +41,11 @@ let lastScanTime = 0;
  * "sweden:S10_Strv_107_12" → "S10_Strv_107_12"
  */
 function extractVehicleTag(tankKey: string): string {
-  return tankKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '');
+  // Strip nation prefix, then strip trailing _v<N> version suffix that WG adds
+  // to vehicle keys in replay files when updating tank models. The WG encyclopedia
+  // API tag field does not include this suffix, so the lookup would silently fail
+  // for any versioned tank, falling back to the rough WN8 approximation.
+  return tankKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '').replace(/_v\d+$/, '');
 }
 
 function clearMemCache() {
@@ -446,9 +450,12 @@ export function registerHandlers(): void {
       lastScanTime = cacheService.getLastScanTime(config.accountId);
     }
     // Incremental scan: only parse replay files whose filename date is within a
-    // 2-minute safety buffer of the last scan. This skips thousands of already-
-    // known files and keeps the auto-refresh tick fast regardless of library size.
-    const sinceMs = lastScanTime > 0 ? lastScanTime - 2 * 60 * 1000 : undefined;
+    // 30-minute safety buffer of the last scan. The buffer must cover the maximum
+    // WoT battle length (~15 min) because replay filenames encode the battle START
+    // time, not the file write time — a battle that started 14 min before the last
+    // scan and ended after it would be permanently missed with a shorter buffer.
+    // INSERT OR IGNORE handles any re-processed duplicates.
+    const sinceMs = lastScanTime > 0 ? lastScanTime - 30 * 60 * 1000 : undefined;
     // For incremental scans, skip loading all arena IDs from SQLite — the filename-date
     // filter already limits parsing to recent files, and INSERT OR IGNORE handles any
     // accidental duplicates. Loading 100k+ IDs on every restart is what caused the
@@ -530,10 +537,20 @@ export function registerHandlers(): void {
 
     return battles.map(b => {
       // Prefer tag-based lookup (exact match to WG internal vehicle tag) over name matching
-      const tankId = memTagToTankId?.get(extractVehicleTag(b.tankKey))
+      const extractedTag = extractVehicleTag(b.tankKey);
+      const tankId = memTagToTankId?.get(extractedTag)
         ?? memNameToTankId?.get(b.tankName);
       const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
       const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
+      // When the XVM expected-values map is loaded but has no entry for this tank
+      // (e.g. recently added vehicles not yet covered by XVM), skip WN8/WNX rather
+      // than running the rough fallback formula. The fallback produces wildly inflated
+      // per-battle values (single wins at high damage can push past 3000+) because it
+      // was designed for multi-battle averages, not individual games.
+      // Consistent with computeOverallWn8AndWnx and replays:recent-stats which both
+      // already skip tanks without expected values.
+      const hasExp = exp !== undefined;
+      const noExpMap = memWn8Exp !== null && !hasExp;
       const single = {
         battles: 1,
         wins: b.result === 'win' ? 1 : 0,
@@ -545,10 +562,12 @@ export function registerHandlers(): void {
       if (b.result === 'incomplete') return { ...b, tankType: vehicle?.type, tankIsPremium: vehicle?.is_premium, wn8: undefined, wnx: undefined };
       return {
         ...b,
+        // Normalize names stored before the _v<N> stripping fix was applied.
+        tankName: b.tankName.replace(/ v\d+$/, ''),
         tankType: vehicle?.type,
         tankIsPremium: vehicle?.is_premium,
-        wn8: calculateWn8(single, exp),
-        wnx: calculateWnx(
+        wn8: noExpMap ? undefined : calculateWn8(single, exp),
+        wnx: noExpMap ? undefined : calculateWnx(
           { ...single, avg_damage_assisted_radio: b.assist },
           exp,
         ),
@@ -559,6 +578,42 @@ export function registerHandlers(): void {
   handle('replays:count', () => {
     const config = configService.getConfig();
     return cacheService.getBattlesCount(config.accountId);
+  });
+
+  handle('replays:recent-stats', async (limitRaw) => {
+    const config = configService.getConfig();
+    const limit = assertOptionalNumber(limitRaw, 'limit', 1000);
+    await Promise.all([getWgData(config), getWn8Exp()]);
+    const groups = cacheService.getRecentBattlesByTank(config.accountId, limit);
+    let totalBattles = 0;
+    let totalWn8Weighted = 0;
+    let totalWnxWeighted = 0;
+    for (const g of groups) {
+      if (g.battles === 0) continue;
+      const tankId = memTagToTankId?.get(extractVehicleTag(g.tankKey));
+      const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
+      if (memWn8Exp && !exp) continue;
+      const stats = {
+        battles: g.battles,
+        wins: g.wins,
+        damage_dealt: g.damage,
+        frags: g.kills,
+        spotted: g.spotted,
+        dropped_capture_points: g.dropped,
+      };
+      totalWn8Weighted += calculateWn8(stats, exp) * g.battles;
+      totalWnxWeighted += calculateWnx(
+        { ...stats, avg_damage_assisted_radio: g.assist / g.battles },
+        exp,
+      ) * g.battles;
+      totalBattles += g.battles;
+    }
+    if (totalBattles === 0) return { wn8: 0, wnx: 0, battles: 0 };
+    return {
+      wn8: Math.round(totalWn8Weighted / totalBattles),
+      wnx: Math.round(totalWnxWeighted / totalBattles),
+      battles: totalBattles,
+    };
   });
 
   handle('replays:map-stats', (sinceMs) => {
