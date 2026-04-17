@@ -10,7 +10,9 @@ import * as replayParser from '../services/replay-parser';
 import * as updaterService from '../services/updater';
 import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
-import type { Tank, TankDetails, BattleRecord } from '../../shared/types';
+import type { Tank, TankDetails, BattleRecord, BattleDebrief } from '../../shared/types';
+import { z } from 'zod';
+import { callClaude } from '../services/claude';
 
 const ONE_HOUR = 60 * 60 * 1000;
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
@@ -379,6 +381,117 @@ export function registerHandlers(): void {
     const updated: TankDetails = { ...details, recommendations };
     cacheService.saveTankDetails(id, updated);
     return updated;
+  });
+
+  // ---------------------------------------------------------------------------
+  // battle:debrief — on-demand tactical analysis of a single battle
+  // ---------------------------------------------------------------------------
+  const BattleDebriefResponseSchema = z.object({
+    summary: z.string(),
+    wentWell: z.array(z.string()),
+    wentWrong: z.array(z.string()),
+    tips: z.array(z.string()),
+  });
+
+  const DEBRIEF_MODEL = 'claude-haiku-4-5-20251001';
+  const DEBRIEF_MAX_TOKENS = 800;
+  const DEBRIEF_SYSTEM = `You are a tactical World of Tanks coach analyzing a single battle. Be specific. Reference actual numbers from the data provided. Avoid generic advice like "play better" or "do more damage". Output strict JSON matching this schema exactly: {"summary": string, "wentWell": string[], "wentWrong": string[], "tips": string[]}`;
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  handle('battle:debrief', async (arenaIdRaw, forceRaw) => {
+    const arenaId = assertString(arenaIdRaw, 'arenaId');
+    const force = forceRaw === true;
+
+    const config = configService.getConfig();
+    if (!config.claudeApiKey) throw new Error('AI not configured. Please set your Claude API key in Settings.');
+
+    // Cache hit (skip if forced)
+    if (!force) {
+      const cached = cacheService.getBattleDebrief(arenaId);
+      if (cached) return cached;
+    }
+
+    // Load battle record from DB
+    const battle = cacheService.getBattleByArenaId(config.accountId, arenaId);
+    if (!battle) throw new Error('Battle not found');
+    if (battle.result === 'incomplete') throw new Error('Cannot debrief an incomplete battle');
+
+    // Gather expected values for this tank (same lookup chain as replays:list)
+    await Promise.all([getWn8Exp(), getWgData(config)]);
+    const extractedTag = extractVehicleTag(battle.tankKey);
+    const tankId = memTagToTankId?.get(extractedTag) ?? memNameToTankId?.get(battle.tankName);
+    const expEntry = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
+    const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
+
+    // Player 30-day baseline on this tank
+    const baseline = cacheService.getTankBaseline(config.accountId, battle.tankKey, THIRTY_DAYS_MS);
+
+    // Build deltas vs expected values
+    const expDmg = expEntry?.expDmg;
+    const dmgVsExpected = expDmg ? Math.round(((battle.damage - expDmg) / expDmg) * 100) : null;
+    const dmgVsBaseline = baseline && baseline.avgDamage > 0
+      ? Math.round(((battle.damage - baseline.avgDamage) / baseline.avgDamage) * 100)
+      : null;
+
+    const userPayload = {
+      tank: {
+        name: battle.tankName.replace(/ v\d+$/, ''),
+        tier: vehicle?.tier ?? null,
+        type: vehicle?.type ?? null,
+        nation: vehicle?.nation ?? null,
+        isPremium: vehicle?.is_premium ?? null,
+      },
+      battle: {
+        damage: battle.damage,
+        assist: battle.assist,
+        blocked: battle.damageBlocked,
+        kills: battle.kills,
+        spotted: battle.spotted,
+        shots: battle.shots,
+        hits: battle.hits,
+        pens: battle.pens,
+        xp: battle.xp,
+        credits: battle.credits,
+        survived: battle.survived,
+        lifeTime: battle.lifeTime,
+        result: battle.result,
+        mapName: battle.mapName,
+        battleType: battle.battleType,
+        duration: battle.duration,
+        damageReceived: battle.damageReceived,
+        droppedCapture: battle.droppedCapture,
+        wn8: battle.wn8 ?? null,
+        wnx: battle.wnx ?? null,
+      },
+      expectedValues: expEntry
+        ? { expDmg: expEntry.expDmg, expFrag: expEntry.expFrag, expSpot: expEntry.expSpot, expDef: expEntry.expDef, expWinRate: Math.round(expEntry.expWinRate * 1000) / 10 }
+        : null,
+      playerBaseline30d: baseline,
+      deltas: {
+        dmgVsExpectedPct: dmgVsExpected,
+        dmgVsBaselinePct: dmgVsBaseline,
+        fragsVsBaseline: baseline ? Math.round((battle.kills - baseline.avgFrags) * 100) / 100 : null,
+        assistVsBaseline: baseline ? battle.assist - baseline.avgAssist : null,
+      },
+    };
+
+    const debriefResponse = await callClaude({
+      apiKey: config.claudeApiKey,
+      model: DEBRIEF_MODEL,
+      system: DEBRIEF_SYSTEM,
+      user: JSON.stringify(userPayload),
+      maxTokens: DEBRIEF_MAX_TOKENS,
+      schema: BattleDebriefResponseSchema,
+    });
+
+    const debrief: BattleDebrief = {
+      ...debriefResponse,
+      generatedAt: Date.now(),
+      model: DEBRIEF_MODEL,
+    };
+
+    cacheService.saveBattleDebrief(arenaId, config.accountId, debrief);
+    return debrief;
   });
 
   handle('cache:clearMem', () => {

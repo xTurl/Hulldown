@@ -142,6 +142,15 @@ export interface PatchItem {
   patchType: 'update' | 'hotfix' | 'micropatch';
 }
 
+export interface BattleDebrief {
+  summary: string;
+  wentWell: string[];
+  wentWrong: string[];
+  tips: string[];
+  generatedAt: number;  // ms timestamp
+  model: string;        // which Claude model produced it
+}
+
 export interface ProgressSnapshot {
   id: number;
   takenAt: number;

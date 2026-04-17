@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import type { ProgressSnapshot } from '../../shared/types';
+import type { ProgressSnapshot, BattleDebrief } from '../../shared/types';
 
 let db: Database.Database | undefined;
 
@@ -89,6 +89,13 @@ function getDb(): Database.Database {
         encyclopedia TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS battle_debriefs (
+        arena_id TEXT PRIMARY KEY,
+        account_id INTEGER NOT NULL,
+        json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_battle_debriefs_account ON battle_debriefs(account_id);
       CREATE INDEX IF NOT EXISTS idx_battles_account_played   ON battles(account_id, played_at DESC);
       CREATE INDEX IF NOT EXISTS idx_battles_account_tank     ON battles(account_id, tank_key);
       CREATE INDEX IF NOT EXISTS idx_battles_account_map      ON battles(account_id, map_name);
@@ -155,11 +162,13 @@ export function clearPlayerInfoCache(): void {
 }
 
 export function clearAll(): void {
-  getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots; DELETE FROM wg_data_cache;');
+  getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots; DELETE FROM wg_data_cache; DELETE FROM battle_debriefs;');
 }
 
 export function clearBattles(accountId: number): void {
-  getDb().prepare('DELETE FROM battles WHERE account_id = ?').run(accountId);
+  const db = getDb();
+  db.prepare('DELETE FROM battles WHERE account_id = ?').run(accountId);
+  db.prepare('DELETE FROM battle_debriefs WHERE account_id = ?').run(accountId);
   knownArenaIdsCache.delete(accountId);
 }
 
@@ -314,6 +323,14 @@ export function insertBattles(battles: import('../types').BattleRecord[]): void 
     const cached = knownArenaIdsCache.get(b.accountId);
     if (cached) cached.add(b.arenaId);
   }
+}
+
+export function getBattleByArenaId(accountId: number, arenaId: string): import('../types').BattleRecord | null {
+  const row = getDb()
+    .prepare(`SELECT ${BATTLE_SELECT} FROM battles WHERE account_id = ? AND arena_id = ?`)
+    .get(accountId, arenaId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return mapBattle(row);
 }
 
 export function getBattles(accountId: number, limit = 10, offset = 0): import('../types').BattleRecord[] {
@@ -616,5 +633,66 @@ export function getStats(): { tanks: number; lastSync: string | null } {
   return {
     tanks: tanksRow.count,
     lastSync: syncRow.last ? new Date(syncRow.last).toLocaleString('en-US') : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Battle Debriefs
+// ---------------------------------------------------------------------------
+
+export function getBattleDebrief(arenaId: string): BattleDebrief | null {
+  const row = getDb()
+    .prepare('SELECT json FROM battle_debriefs WHERE arena_id = ?')
+    .get(arenaId) as { json: string } | undefined;
+  if (!row) return null;
+  return JSON.parse(row.json) as BattleDebrief;
+}
+
+export function saveBattleDebrief(arenaId: string, accountId: number, debrief: BattleDebrief): void {
+  getDb()
+    .prepare('INSERT OR REPLACE INTO battle_debriefs (arena_id, account_id, json, created_at) VALUES (?, ?, ?, ?)')
+    .run(arenaId, accountId, JSON.stringify(debrief), Date.now());
+}
+
+/** Clear debriefs. Passing accountId clears only that player's debriefs; omit to clear all. */
+export function clearBattleDebriefs(accountId?: number): void {
+  if (accountId !== undefined) {
+    getDb().prepare('DELETE FROM battle_debriefs WHERE account_id = ?').run(accountId);
+  } else {
+    getDb().prepare('DELETE FROM battle_debriefs').run();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tank Baseline — 30-day aggregate for the debrief prompt
+// ---------------------------------------------------------------------------
+
+export interface TankBaseline {
+  battles: number;
+  avgDamage: number;
+  avgFrags: number;
+  avgAssist: number;
+  winRate: number;
+}
+
+export function getTankBaseline(accountId: number, tankKey: string, sinceMs: number): TankBaseline | null {
+  const cutoff = Date.now() - sinceMs;
+  const row = getDb().prepare(`
+    SELECT COUNT(*) as battles,
+           ROUND(AVG(damage), 0) as avgDamage,
+           ROUND(AVG(kills), 2) as avgFrags,
+           ROUND(AVG(assist), 0) as avgAssist,
+           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate
+    FROM battles
+    WHERE account_id = ? AND tank_key = ? AND result != 'incomplete' AND played_at >= ?
+  `).get(accountId, tankKey, cutoff) as Record<string, number> | undefined;
+
+  if (!row || row.battles === 0) return null;
+  return {
+    battles: row.battles,
+    avgDamage: row.avgDamage,
+    avgFrags: row.avgFrags,
+    avgAssist: row.avgAssist,
+    winRate: row.winRate,
   };
 }

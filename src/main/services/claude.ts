@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
+import type { ZodSchema } from 'zod';
 import type { Tank, MapStat, AIRecommendations } from '../../shared/types';
 import type { ReplayTankContext } from './cache';
 
@@ -29,6 +31,67 @@ export function sanitizeForPrompt(value: string, maxLength = 200): string {
     .slice(0, maxLength);
 }
 
+/**
+ * Generic Claude API caller. Instantiates the client, sends a single
+ * user message, extracts the first text block, JSON-parses it, and
+ * validates the result against the provided Zod schema.
+ *
+ * This is the shared foundation for all AI features in Hulldown.
+ * Do NOT add retry logic, streaming, or prompt caching here yet —
+ * those concerns belong in the callers once we understand real usage.
+ */
+export async function callClaude<T>(opts: {
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  maxTokens?: number;
+  schema: ZodSchema<T>;
+}): Promise<T> {
+  const client = new Anthropic({ apiKey: opts.apiKey });
+
+  const message = await client.messages.create({
+    model: opts.model,
+    max_tokens: opts.maxTokens ?? 1024,
+    system: opts.system,
+    messages: [{ role: 'user', content: opts.user }],
+  });
+
+  const content = message.content[0];
+  if (content.type !== 'text') throw new Error('Unexpected response type from Claude');
+
+  // Strip optional markdown code fences that some Claude responses include
+  const rawText = content.text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch (e) {
+    throw new Error(`Claude returned invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  const result = opts.schema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(`Claude response failed schema validation: ${result.error.message}`);
+  }
+
+  return result.data;
+}
+
+// ---------------------------------------------------------------------------
+// Tank Recommendations — uses callClaude internally
+// ---------------------------------------------------------------------------
+
+const AIRecommendationsSchema = z.object({
+  summary: z.string(),
+  strengths: z.array(z.string()),
+  weaknesses: z.array(z.string()),
+  tips: z.array(z.string()),
+});
+
 export async function generateTankRecommendations(
   tank: TankWithAssisted,
   mapStats: MapStat[],
@@ -36,8 +99,6 @@ export async function generateTankRecommendations(
   playerContext?: PlayerContext,
   replayContext?: ReplayTankContext | null,
 ): Promise<AIRecommendations> {
-  const client = new Anthropic({ apiKey });
-
   // Map stats: prefer replay data (own battles) over tomato.gg scraping
   const replayMaps = replayContext?.mapStats ?? [];
   const effectiveMaps = replayMaps.length >= 3 ? replayMaps : mapStats;
@@ -98,17 +159,14 @@ All text values in the JSON must be in English. Respond ONLY in valid JSON (no m
   ]
 }`;
 
-  const message = await client.messages.create({
+  const result = await callClaude({
+    apiKey,
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1000,
     system: 'You are a World of Tanks expert assistant. Always respond in English only, regardless of the language of any data you receive.',
-    messages: [{ role: 'user', content: prompt }],
+    user: prompt,
+    maxTokens: 1000,
+    schema: AIRecommendationsSchema,
   });
 
-  const content = message.content[0];
-  if (content.type !== 'text') throw new Error('Unexpected response type');
-
-  const rawText = content.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  const parsed = JSON.parse(rawText) as AIRecommendations;
-  return { ...parsed, generatedAt: Date.now() };
+  return { ...result, generatedAt: Date.now() };
 }

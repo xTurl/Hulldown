@@ -5,6 +5,7 @@ import { getWn8Color } from '../../shared/utils/wn8';
 import { normalizeMapName } from '../../shared/utils/mapNames';
 import { useConfigStore } from '../stores/config';
 import { useScanStore } from '../stores/scan';
+import BattleDebriefModal from './BattleDebriefModal.vue';
 import iconLight from '../assets/light.png';
 import iconLightPremium from '../assets/light_premium.png';
 import iconMedium from '../assets/medium.png';
@@ -142,6 +143,16 @@ const MASTERY_COLOR = ['', '#9ca3af', '#a78bfa', '#fbbf24', '#f97316'];
 function masteryLabel(m: number) { return MASTERY_LABEL[m] ?? ''; }
 function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
+// Debrief modal state
+const debriefBattle = ref<BattleRecord | null>(null);
+
+function openDebrief(b: BattleRecord) {
+  debriefBattle.value = b;
+}
+
+function closeDebrief() {
+  debriefBattle.value = null;
+}
 </script>
 
 <template>
@@ -277,6 +288,19 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
               </p>
             </div>
 
+            <!-- Debrief button — only for completed battles -->
+            <button
+              v-if="b.result !== 'incomplete'"
+              @click="openDebrief(b)"
+              class="self-center ml-1 px-2 py-1.5 rounded-lg text-xs font-medium text-gold hover:text-gold-dim bg-gold-bg hover:opacity-80 transition-opacity flex items-center gap-1"
+              title="AI battle debrief"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2zm0 6v4m0 4h.01" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>Debrief</span>
+            </button>
+
           </div>
         </div>
 
@@ -307,4 +331,7 @@ function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
     </div>
 
   </div>
+
+  <!-- Battle Debrief Modal -->
+  <BattleDebriefModal :battle="debriefBattle" @close="closeDebrief" />
 </template>

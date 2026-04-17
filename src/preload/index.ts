@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo } from '../shared/types';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief } from '../shared/types';
 
 contextBridge.exposeInMainWorld('api', {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
@@ -34,4 +34,5 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   checkForUpdates: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+  getBattleDebrief: (arenaId: string, force?: boolean): Promise<BattleDebrief> => ipcRenderer.invoke('battle:debrief', arenaId, force),
 });
