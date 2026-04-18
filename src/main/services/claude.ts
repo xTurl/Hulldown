@@ -47,15 +47,20 @@ export async function callClaude<T>(opts: {
   user: string;
   maxTokens?: number;
   schema: ZodSchema<T>;
+  timeoutMs?: number;
 }): Promise<T> {
   const client = new Anthropic({ apiKey: opts.apiKey });
+  const timeoutMs = opts.timeoutMs ?? 90_000;
 
-  const message = await client.messages.create({
-    model: opts.model,
-    max_tokens: opts.maxTokens ?? 1024,
-    system: opts.system,
-    messages: [{ role: 'user', content: opts.user }],
-  });
+  const message = await client.messages.create(
+    {
+      model: opts.model,
+      max_tokens: opts.maxTokens ?? 1024,
+      system: opts.system,
+      messages: [{ role: 'user', content: opts.user }],
+    },
+    { timeout: timeoutMs },
+  );
 
   const content = message.content[0];
   if (content.type !== 'text') throw new Error('Unexpected response type from Claude');

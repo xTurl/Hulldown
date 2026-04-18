@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief } from '../shared/types';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief, WeeklyCoachReport } from '../shared/types';
 
 contextBridge.exposeInMainWorld('api', {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
@@ -35,4 +35,6 @@ contextBridge.exposeInMainWorld('api', {
   checkForUpdates: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
   getBattleDebrief: (arenaId: string, force?: boolean): Promise<BattleDebrief> => ipcRenderer.invoke('battle:debrief', arenaId, force),
+  getWeeklyReport: (force?: boolean): Promise<WeeklyCoachReport> => ipcRenderer.invoke('coach:weekly-report', force),
+  getReportHistory: (limit?: number): Promise<{ isoWeek: string; createdAt: number }[]> => ipcRenderer.invoke('coach:report-history', limit),
 });

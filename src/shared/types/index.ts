@@ -167,3 +167,55 @@ export interface ProgressSnapshot {
   rawSpotted: number;
   rawDroppedCp: number;
 }
+
+// ---------------------------------------------------------------------------
+// Weekly Coach Report
+// ---------------------------------------------------------------------------
+
+export interface WeeklyCoachReport {
+  summary: string;
+  focusTanks: WeeklyTankCall[];
+  restTanks: WeeklyTankCall[];
+  mapPlaybook: WeeklyMapTip[];
+  mapsToAvoid: WeeklyMapFlag[];
+  commonMistakes: WeeklyMistake[];
+  oneThingToFix: string;
+  highlightBattle: WeeklyHighlightBattle | null;
+  generatedAt: number;
+  model: string;
+  periodStartMs: number;
+  periodEndMs: number;
+}
+
+export interface WeeklyMistake {
+  pattern: string;
+  evidence: string;
+  fix: string;
+}
+
+export interface WeeklyTankCall {
+  tankName: string;
+  delta: string;
+  reason: string;
+}
+
+export interface WeeklyMapTip {
+  mapName: string;
+  winRate: number;
+  tip: string;
+}
+
+export interface WeeklyMapFlag {
+  mapName: string;
+  winRate: number;
+  reason: string;
+}
+
+export interface WeeklyHighlightBattle {
+  arenaId: string;
+  tankName: string;
+  mapName: string;
+  damage: number;
+  frags: number;
+  result: 'win' | 'loss' | 'draw';
+}

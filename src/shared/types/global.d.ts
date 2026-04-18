@@ -1,4 +1,4 @@
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord, UpdateInfo } from './index';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord, UpdateInfo, BattleDebrief, WeeklyCoachReport } from './index';
 import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession } from '../../main/services/cache';
 import type { DetectedPlayer } from '../../main/services/replay-parser';
 
@@ -35,6 +35,10 @@ declare global {
       openExternal(url: string): Promise<void>;
       checkForUpdates(): Promise<UpdateInfo | null>;
       clearMemCache(): Promise<void>;
+      getAppVersion(): Promise<string>;
+      getBattleDebrief(arenaId: string, force?: boolean): Promise<BattleDebrief>;
+      getWeeklyReport(force?: boolean): Promise<WeeklyCoachReport>;
+      getReportHistory(limit?: number): Promise<{ isoWeek: string; createdAt: number }[]>;
     };
   }
 }

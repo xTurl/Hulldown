@@ -8,6 +8,7 @@ import Patches from '../views/Patches.vue';
 import Tutorials from '../views/Tutorials.vue';
 import Settings from '../views/Settings.vue';
 import Analytics from '../views/Analytics.vue';
+import Coach from '../views/Coach.vue';
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -17,6 +18,7 @@ export const router = createRouter({
     { path: '/tanks/:id', component: TankDetail, props: true },
     { path: '/compare', component: TankCompare },
     { path: '/analytics', component: Analytics },
+    { path: '/coach', component: Coach },
     { path: '/news', component: News },
     { path: '/patches', component: Patches },
     { path: '/tutorials', component: Tutorials },

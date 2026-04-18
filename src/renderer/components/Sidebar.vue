@@ -37,6 +37,12 @@ const navItems = [
     icon: '<polyline points="3,19 8,13 12,16 17,8 21,10"/><polyline points="16,8 21,8 21,13"/>',
   },
   {
+    path: '/coach',
+    label: 'Coach',
+    // Whistle / graduation cap — uses a clipboard with a checkmark to represent coaching
+    icon: '<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12l2 2 4-4"/>',
+  },
+  {
     path: '/news',
     label: 'News',
     // Document with lines

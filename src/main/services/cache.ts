@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import type { ProgressSnapshot, BattleDebrief } from '../../shared/types';
+import type { ProgressSnapshot, BattleDebrief, WeeklyCoachReport } from '../../shared/types';
 
 let db: Database.Database | undefined;
 
@@ -95,6 +95,13 @@ function getDb(): Database.Database {
         json TEXT NOT NULL,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS weekly_reports (
+        account_id INTEGER NOT NULL,
+        iso_week TEXT NOT NULL,
+        json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (account_id, iso_week)
+      );
       CREATE INDEX IF NOT EXISTS idx_battle_debriefs_account ON battle_debriefs(account_id);
       CREATE INDEX IF NOT EXISTS idx_battles_account_played   ON battles(account_id, played_at DESC);
       CREATE INDEX IF NOT EXISTS idx_battles_account_tank     ON battles(account_id, tank_key);
@@ -162,13 +169,14 @@ export function clearPlayerInfoCache(): void {
 }
 
 export function clearAll(): void {
-  getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots; DELETE FROM wg_data_cache; DELETE FROM battle_debriefs;');
+  getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots; DELETE FROM wg_data_cache; DELETE FROM battle_debriefs; DELETE FROM weekly_reports;');
 }
 
 export function clearBattles(accountId: number): void {
   const db = getDb();
   db.prepare('DELETE FROM battles WHERE account_id = ?').run(accountId);
   db.prepare('DELETE FROM battle_debriefs WHERE account_id = ?').run(accountId);
+  db.prepare('DELETE FROM weekly_reports WHERE account_id = ?').run(accountId);
   knownArenaIdsCache.delete(accountId);
 }
 
@@ -694,5 +702,316 @@ export function getTankBaseline(accountId: number, tankKey: string, sinceMs: num
     avgFrags: row.avgFrags,
     avgAssist: row.avgAssist,
     winRate: row.winRate,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Weekly Reports — cache helpers
+// ---------------------------------------------------------------------------
+
+export function getWeeklyReport(accountId: number, isoWeek: string): WeeklyCoachReport | null {
+  const row = getDb()
+    .prepare('SELECT json FROM weekly_reports WHERE account_id = ? AND iso_week = ?')
+    .get(accountId, isoWeek) as { json: string } | undefined;
+  if (!row) return null;
+  return JSON.parse(row.json) as WeeklyCoachReport;
+}
+
+export function saveWeeklyReport(accountId: number, isoWeek: string, report: WeeklyCoachReport): void {
+  getDb()
+    .prepare('INSERT OR REPLACE INTO weekly_reports (account_id, iso_week, json, created_at) VALUES (?, ?, ?, ?)')
+    .run(accountId, isoWeek, JSON.stringify(report), Date.now());
+}
+
+/** Clear weekly reports. Passing accountId clears only that player's reports; omit to clear all. */
+export function clearWeeklyReports(accountId?: number): void {
+  if (accountId !== undefined) {
+    getDb().prepare('DELETE FROM weekly_reports WHERE account_id = ?').run(accountId);
+  } else {
+    getDb().prepare('DELETE FROM weekly_reports').run();
+  }
+}
+
+export function listWeeklyReports(accountId: number, limit = 10): { isoWeek: string; createdAt: number }[] {
+  return getDb()
+    .prepare('SELECT iso_week as isoWeek, created_at as createdAt FROM weekly_reports WHERE account_id = ? ORDER BY iso_week DESC LIMIT ?')
+    .all(accountId, limit) as { isoWeek: string; createdAt: number }[];
+}
+
+// ---------------------------------------------------------------------------
+// Weekly Coach Data — aggregation for the weekly coach AI prompt
+// ---------------------------------------------------------------------------
+
+/** Totals for one week window. */
+interface WeekTotals {
+  battles: number;
+  wins: number;
+  losses: number;
+  hoursPlayed: number;
+  totalDamage: number;
+  totalFrags: number;
+  totalSpotted: number;
+  avgDamage: number;
+  winRate: number;
+  avgNetCredits: number;
+  survivalRate: number;          // 0-100
+  avgLifeTimeSec: number;        // avg seconds alive (all battles)
+  avgDmgReceived: number;
+  avgDmgBlocked: number;
+  earlyDeathRate: number;        // 0-100, % of non-survived battles with lifeTime < 180s
+}
+
+interface TankImprover {
+  tankKey: string;
+  tankName: string;
+  battlesThisWeek: number;
+  avgDmgThisWeek: number;
+  avgDmgPriorMonth: number;
+  delta: number;
+}
+
+interface MapPerf {
+  mapName: string;
+  battles: number;
+  winRate: number;
+  avgDmg: number;
+}
+
+interface HighlightBattle {
+  arenaId: string;
+  tankName: string;
+  mapName: string;
+  damage: number;
+  frags: number;
+  result: string;
+  playedAt: number;
+}
+
+interface ProgressDelta {
+  wn8Start: number | null;
+  wn8End: number | null;
+  wn8Delta: number | null;
+  wnxStart: number | null;
+  wnxEnd: number | null;
+  wnxDelta: number | null;
+  wrStart: number | null;
+  wrEnd: number | null;
+  wrDelta: number | null;
+}
+
+interface ThirtyDayBaseline {
+  battles: number;
+  wn8: number | null;
+  winRate: number | null;
+  avgDmg: number | null;
+}
+
+export interface WeeklyCoachData {
+  thisWeek: WeekTotals;
+  priorWeek: WeekTotals;
+  progressDelta: ProgressDelta;
+  topImprovers: TankImprover[];
+  topDecliners: TankImprover[];
+  bestMaps: MapPerf[];
+  worstMaps: MapPerf[];
+  highlightBattle: HighlightBattle | null;
+  thirtyDayBaseline: ThirtyDayBaseline;
+}
+
+function computeWeekTotals(accountId: number, startMs: number, endMs: number): WeekTotals {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT COUNT(*) as battles,
+           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
+           SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses,
+           SUM(duration) as totalDuration,
+           SUM(damage) as totalDamage,
+           SUM(kills) as totalFrags,
+           SUM(spotted) as totalSpotted,
+           ROUND(AVG(damage), 0) as avgDamage,
+           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
+           ROUND(AVG(net_credits), 0) as avgNetCredits,
+           ROUND(AVG(CASE WHEN survived=1 THEN 100.0 ELSE 0 END), 1) as survivalRate,
+           ROUND(AVG(life_time), 0) as avgLifeTimeSec,
+           ROUND(AVG(damage_received), 0) as avgDmgReceived,
+           ROUND(AVG(damage_blocked), 0) as avgDmgBlocked,
+           SUM(CASE WHEN survived=0 AND life_time > 0 AND life_time < 180 THEN 1 ELSE 0 END) as earlyDeaths,
+           SUM(CASE WHEN survived=0 THEN 1 ELSE 0 END) as totalDeaths
+    FROM battles
+    WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
+  `).get(accountId, startMs, endMs) as Record<string, number> | undefined;
+
+  if (!row || row.battles === 0) {
+    return {
+      battles: 0, wins: 0, losses: 0, hoursPlayed: 0, totalDamage: 0, totalFrags: 0,
+      totalSpotted: 0, avgDamage: 0, winRate: 0, avgNetCredits: 0,
+      survivalRate: 0, avgLifeTimeSec: 0, avgDmgReceived: 0, avgDmgBlocked: 0, earlyDeathRate: 0,
+    };
+  }
+
+  const earlyDeathRate = row.totalDeaths > 0
+    ? Math.round((row.earlyDeaths / row.totalDeaths) * 1000) / 10
+    : 0;
+
+  return {
+    battles: row.battles,
+    wins: row.wins,
+    losses: row.losses,
+    hoursPlayed: Math.round((row.totalDuration / 3600) * 10) / 10,
+    totalDamage: row.totalDamage,
+    totalFrags: row.totalFrags,
+    totalSpotted: row.totalSpotted,
+    avgDamage: row.avgDamage,
+    winRate: row.winRate,
+    avgNetCredits: row.avgNetCredits,
+    survivalRate: row.survivalRate,
+    avgLifeTimeSec: row.avgLifeTimeSec,
+    avgDmgReceived: row.avgDmgReceived,
+    avgDmgBlocked: row.avgDmgBlocked,
+    earlyDeathRate,
+  };
+}
+
+export function getWeeklyCoachData(accountId: number, endMs: number): WeeklyCoachData {
+  const db = getDb();
+  const WEEK_MS = 7 * 24 * 3600 * 1000;
+  const thisWeekStart = endMs - WEEK_MS;
+  const priorWeekStart = endMs - 2 * WEEK_MS;
+  const priorMonthStart = endMs - 37 * 24 * 3600 * 1000; // prior month baseline for tank comparisons
+
+  // --- This week & prior week totals ---
+  const thisWeek = computeWeekTotals(accountId, thisWeekStart, endMs);
+  const priorWeek = computeWeekTotals(accountId, priorWeekStart, thisWeekStart);
+
+  // --- Progress snapshot delta ---
+  const snapshots = db.prepare(`
+    SELECT wn8, wnx, win_rate as winRate
+    FROM progress_snapshots
+    WHERE account_id = ? AND taken_at >= ? AND taken_at <= ?
+    ORDER BY taken_at ASC
+  `).all(accountId, thisWeekStart, endMs) as { wn8: number; wnx: number; winRate: number }[];
+
+  let progressDelta: ProgressDelta;
+  if (snapshots.length >= 2) {
+    const first = snapshots[0];
+    const last = snapshots[snapshots.length - 1];
+    progressDelta = {
+      wn8Start: first.wn8, wn8End: last.wn8, wn8Delta: last.wn8 - first.wn8,
+      wnxStart: first.wnx, wnxEnd: last.wnx, wnxDelta: last.wnx - first.wnx,
+      wrStart: first.winRate, wrEnd: last.winRate, wrDelta: Math.round((last.winRate - first.winRate) * 10) / 10,
+    };
+  } else if (snapshots.length === 1) {
+    const s = snapshots[0];
+    progressDelta = {
+      wn8Start: s.wn8, wn8End: s.wn8, wn8Delta: 0,
+      wnxStart: s.wnx, wnxEnd: s.wnx, wnxDelta: 0,
+      wrStart: s.winRate, wrEnd: s.winRate, wrDelta: 0,
+    };
+  } else {
+    progressDelta = {
+      wn8Start: null, wn8End: null, wn8Delta: null,
+      wnxStart: null, wnxEnd: null, wnxDelta: null,
+      wrStart: null, wrEnd: null, wrDelta: null,
+    };
+  }
+
+  // --- Per-tank this week (≥5 battles) ---
+  const tanksThisWeek = db.prepare(`
+    SELECT tank_key as tankKey, tank_name as tankName,
+           COUNT(*) as battles,
+           ROUND(AVG(damage), 0) as avgDmg
+    FROM battles
+    WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
+    GROUP BY tank_key HAVING COUNT(*) >= 5
+  `).all(accountId, thisWeekStart, endMs) as { tankKey: string; tankName: string; battles: number; avgDmg: number }[];
+
+  // For each qualifying tank, get prior month avg damage
+  const topImprovers: TankImprover[] = [];
+  const topDecliners: TankImprover[] = [];
+
+  if (tanksThisWeek.length > 0) {
+    // Batch query prior month stats for all qualifying tanks
+    const priorRows = db.prepare(`
+      SELECT tank_key as tankKey,
+             ROUND(AVG(damage), 0) as avgDmg
+      FROM battles
+      WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
+        AND tank_key IN (${tanksThisWeek.map(() => '?').join(',')})
+      GROUP BY tank_key
+    `).all(accountId, priorMonthStart, thisWeekStart, ...tanksThisWeek.map(t => t.tankKey)) as { tankKey: string; avgDmg: number }[];
+
+    const priorMap = new Map(priorRows.map(r => [r.tankKey, r.avgDmg]));
+
+    const improvers = tanksThisWeek
+      .filter(t => priorMap.has(t.tankKey))
+      .map(t => ({
+        tankKey: t.tankKey,
+        tankName: t.tankName,
+        battlesThisWeek: t.battles,
+        avgDmgThisWeek: t.avgDmg,
+        avgDmgPriorMonth: priorMap.get(t.tankKey)!,
+        delta: t.avgDmg - priorMap.get(t.tankKey)!,
+      }));
+
+    improvers.sort((a, b) => b.delta - a.delta);
+    topImprovers.push(...improvers.slice(0, 5));
+
+    const decliners = [...improvers].sort((a, b) => a.delta - b.delta);
+    topDecliners.push(...decliners.slice(0, 5));
+  }
+
+  // --- Best & worst maps this week (≥3 battles) ---
+  const mapsThisWeek = db.prepare(`
+    SELECT map_name as mapName, COUNT(*) as battles,
+           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
+           ROUND(AVG(damage), 0) as avgDmg
+    FROM battles
+    WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
+    GROUP BY map_name HAVING COUNT(*) >= 3
+    ORDER BY winRate DESC
+  `).all(accountId, thisWeekStart, endMs) as { mapName: string; battles: number; winRate: number; avgDmg: number }[];
+
+  const bestMaps: MapPerf[] = mapsThisWeek.slice(0, 3).map(m => ({ mapName: m.mapName, battles: m.battles, winRate: m.winRate, avgDmg: m.avgDmg }));
+  const worstMaps: MapPerf[] = [...mapsThisWeek].sort((a, b) => a.winRate - b.winRate).slice(0, 3).map(m => ({ mapName: m.mapName, battles: m.battles, winRate: m.winRate, avgDmg: m.avgDmg }));
+
+  // --- Highlight battle: highest damage this week (proxy for WN8 - documented choice) ---
+  const highlightRow = db.prepare(`
+    SELECT arena_id as arenaId, tank_name as tankName, map_name as mapName,
+           damage, kills as frags, result, played_at as playedAt
+    FROM battles
+    WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
+    ORDER BY damage DESC LIMIT 1
+  `).get(accountId, thisWeekStart, endMs) as { arenaId: string; tankName: string; mapName: string; damage: number; frags: number; result: string; playedAt: number } | undefined;
+
+  const highlightBattle: HighlightBattle | null = highlightRow
+    ? { arenaId: highlightRow.arenaId, tankName: highlightRow.tankName, mapName: highlightRow.mapName, damage: highlightRow.damage, frags: highlightRow.frags, result: highlightRow.result, playedAt: highlightRow.playedAt }
+    : null;
+
+  // --- 30-day baseline (excluding this week) ---
+  const baselineRow = db.prepare(`
+    SELECT COUNT(*) as battles,
+           ROUND(AVG(damage), 0) as avgDmg,
+           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate
+    FROM battles
+    WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
+  `).get(accountId, endMs - 30 * 24 * 3600 * 1000, thisWeekStart) as Record<string, number> | undefined;
+
+  const thirtyDayBaseline: ThirtyDayBaseline = {
+    battles: baselineRow?.battles ?? 0,
+    wn8: null, // WN8 is expensive to compute in SQL without XVM data; omit from SQL, let AI use damage/WR as proxy
+    winRate: baselineRow && baselineRow.battles > 0 ? baselineRow.winRate : null,
+    avgDmg: baselineRow && baselineRow.battles > 0 ? baselineRow.avgDmg : null,
+  };
+
+  return {
+    thisWeek,
+    priorWeek,
+    progressDelta,
+    topImprovers,
+    topDecliners,
+    bestMaps,
+    worstMaps,
+    highlightBattle,
+    thirtyDayBaseline,
   };
 }
