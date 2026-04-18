@@ -6,17 +6,17 @@ import * as analyticsService from '../services/analytics';
 import * as wgService from '../services/wargaming';
 import * as newsService from '../services/news';
 import * as patchesService from '../services/patches';
-import * as claudeService from '../services/claude';
 import * as replayParser from '../services/replay-parser';
 import * as updaterService from '../services/updater';
 import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
 import type { Tank, TankDetails, BattleRecord, BattleDebrief, WeeklyCoachReport } from '../../shared/types';
-import { z } from 'zod';
-import { callClaude, withAICache } from '../services/claude';
+import { withAICache } from '../services/claude';
+import { generateTankRecommendations, type PlayerContext } from '../ai/tank-recommendations';
+import { runBattleDebrief } from '../ai/battle-debrief';
+import { runWeeklyCoach } from '../ai/weekly-coach';
 import { getIsoWeek } from '../../shared/utils/dates';
 import { MINUTE, HOUR, DAY, WEEK } from '../../shared/utils/time';
-import { BATTLE_DEBRIEF_SYSTEM, WEEKLY_COACH_SYSTEM } from '../prompts';
 
 const ONE_HOUR = HOUR;
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
@@ -204,7 +204,7 @@ function computeOverallWn8AndWnx(tankStats: wgService.WgTankStat[]): { wn8: numb
 function buildPlayerContext(
   tankStats: wgService.WgTankStat[],
   encyclopedia: Record<number, wgService.WgVehicle>,
-): claudeService.PlayerContext {
+): PlayerContext {
   const byClass: Record<string, { battles: number; wins: number; wn8Weighted: number }> = {};
   let totalBattles = 0;
   let totalWins = 0;
@@ -224,7 +224,7 @@ function buildPlayerContext(
     totalWn8Weighted += wn8 * t.all.battles;
   }
 
-  const byClassResult: claudeService.PlayerContext['byClass'] = {};
+  const byClassResult: PlayerContext['byClass'] = {};
   for (const [label, s] of Object.entries(byClass)) {
     byClassResult[label] = {
       battles: s.battles,
@@ -378,7 +378,7 @@ export function registerHandlers(): void {
 
     const replayContext = cacheService.getReplayTankContext(config.accountId, details.name);
 
-    const recommendations = await claudeService.generateTankRecommendations(
+    const recommendations = await generateTankRecommendations(
       details, details.mapStats, config.claudeApiKey, playerContext, replayContext
     );
 
@@ -390,15 +390,6 @@ export function registerHandlers(): void {
   // ---------------------------------------------------------------------------
   // battle:debrief — on-demand tactical analysis of a single battle
   // ---------------------------------------------------------------------------
-  const BattleDebriefResponseSchema = z.object({
-    summary: z.string(),
-    wentWell: z.array(z.string()),
-    wentWrong: z.array(z.string()),
-    tips: z.array(z.string()),
-  });
-
-  const DEBRIEF_MODEL = 'claude-haiku-4-5-20251001';
-  const DEBRIEF_MAX_TOKENS = 800;
   const THIRTY_DAYS_MS = 30 * DAY;
 
   handle('battle:debrief', async (arenaIdRaw, forceRaw) => {
@@ -423,71 +414,9 @@ export function registerHandlers(): void {
         const tankId = memTagToTankId?.get(extractedTag) ?? memNameToTankId?.get(battle.tankName);
         const expEntry = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
         const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
-
         const baseline = cacheService.getTankBaseline(config.accountId, battle.tankKey, THIRTY_DAYS_MS);
 
-        const expDmg = expEntry?.expDmg;
-        const dmgVsExpected = expDmg ? Math.round(((battle.damage - expDmg) / expDmg) * 100) : null;
-        const dmgVsBaseline = baseline && baseline.avgDamage > 0
-          ? Math.round(((battle.damage - baseline.avgDamage) / baseline.avgDamage) * 100)
-          : null;
-
-        const userPayload = {
-          tank: {
-            name: battle.tankName.replace(/ v\d+$/, ''),
-            tier: vehicle?.tier ?? null,
-            type: vehicle?.type ?? null,
-            nation: vehicle?.nation ?? null,
-            isPremium: vehicle?.is_premium ?? null,
-          },
-          battle: {
-            damage: battle.damage,
-            assist: battle.assist,
-            blocked: battle.damageBlocked,
-            kills: battle.kills,
-            spotted: battle.spotted,
-            shots: battle.shots,
-            hits: battle.hits,
-            pens: battle.pens,
-            xp: battle.xp,
-            credits: battle.credits,
-            survived: battle.survived,
-            lifeTime: battle.lifeTime,
-            result: battle.result,
-            mapName: battle.mapName,
-            battleType: battle.battleType,
-            duration: battle.duration,
-            damageReceived: battle.damageReceived,
-            droppedCapture: battle.droppedCapture,
-            wn8: battle.wn8 ?? null,
-            wnx: battle.wnx ?? null,
-          },
-          expectedValues: expEntry
-            ? { expDmg: expEntry.expDmg, expFrag: expEntry.expFrag, expSpot: expEntry.expSpot, expDef: expEntry.expDef, expWinRate: Math.round(expEntry.expWinRate * 1000) / 10 }
-            : null,
-          playerBaseline30d: baseline,
-          deltas: {
-            dmgVsExpectedPct: dmgVsExpected,
-            dmgVsBaselinePct: dmgVsBaseline,
-            fragsVsBaseline: baseline ? Math.round((battle.kills - baseline.avgFrags) * 100) / 100 : null,
-            assistVsBaseline: baseline ? battle.assist - baseline.avgAssist : null,
-          },
-        };
-
-        const debriefResponse = await callClaude({
-          apiKey: config.claudeApiKey,
-          model: DEBRIEF_MODEL,
-          system: BATTLE_DEBRIEF_SYSTEM,
-          user: JSON.stringify(userPayload),
-          maxTokens: DEBRIEF_MAX_TOKENS,
-          schema: BattleDebriefResponseSchema,
-        });
-
-        return {
-          ...debriefResponse,
-          generatedAt: Date.now(),
-          model: DEBRIEF_MODEL,
-        };
+        return runBattleDebrief({ battle, vehicle, expEntry, baseline }, config.claudeApiKey);
       },
     });
   });
@@ -495,25 +424,6 @@ export function registerHandlers(): void {
   // ---------------------------------------------------------------------------
   // coach:weekly-report — action-oriented 7-day performance analysis
   // ---------------------------------------------------------------------------
-  const TankCallSchema = z.object({
-    tankName: z.string(),
-    delta: z.string(),
-    reason: z.string(),
-  });
-  const WeeklyCoachResponseSchema = z.object({
-    summary: z.string(),
-    focusTanks: z.array(TankCallSchema),
-    restTanks: z.array(TankCallSchema),
-    mapPlaybook: z.array(z.object({ mapName: z.string(), winRate: z.number(), tip: z.string() })),
-    mapsToAvoid: z.array(z.object({ mapName: z.string(), winRate: z.number(), reason: z.string() })),
-    commonMistakes: z.array(z.object({ pattern: z.string(), evidence: z.string(), fix: z.string() })),
-    oneThingToFix: z.string(),
-    highlightArenaId: z.string().nullable(),
-  });
-
-  const WEEKLY_COACH_MODEL = 'claude-sonnet-4-6';
-  const WEEKLY_COACH_MAX_TOKENS = 2000;
-
   handle('coach:weekly-report', async (forceRaw) => {
     const force = forceRaw === true;
     const config = configService.getConfig();
@@ -533,55 +443,7 @@ export function registerHandlers(): void {
         if (data.thisWeek.battles === 0) {
           throw new Error("No battles this week — play some tanks first!");
         }
-
-        const userPayload = {
-          thisWeek: data.thisWeek,
-          priorWeek: data.priorWeek,
-          progressDelta: data.progressDelta,
-          thirtyDayBaseline: data.thirtyDayBaseline,
-          topImprovers: data.topImprovers,
-          topDecliners: data.topDecliners,
-          bestMaps: data.bestMaps,
-          worstMaps: data.worstMaps,
-          highlightBattleCandidate: data.highlightBattle,
-        };
-
-        const coachResponse = await callClaude({
-          apiKey: config.claudeApiKey,
-          model: WEEKLY_COACH_MODEL,
-          system: WEEKLY_COACH_SYSTEM,
-          user: JSON.stringify(userPayload, null, 2),
-          maxTokens: WEEKLY_COACH_MAX_TOKENS,
-          schema: WeeklyCoachResponseSchema,
-        });
-
-        // Reconstruct highlight battle from candidate + AI's arenaId pick (avoids Claude hallucinating stats)
-        const highlightBattle =
-          coachResponse.highlightArenaId && data.highlightBattle && coachResponse.highlightArenaId === data.highlightBattle.arenaId
-            ? {
-                arenaId: data.highlightBattle.arenaId,
-                tankName: data.highlightBattle.tankName,
-                mapName: data.highlightBattle.mapName,
-                damage: data.highlightBattle.damage,
-                frags: data.highlightBattle.frags,
-                result: data.highlightBattle.result as 'win' | 'loss' | 'draw',
-              }
-            : null;
-
-        return {
-          summary: coachResponse.summary,
-          focusTanks: coachResponse.focusTanks,
-          restTanks: coachResponse.restTanks,
-          mapPlaybook: coachResponse.mapPlaybook,
-          mapsToAvoid: coachResponse.mapsToAvoid,
-          commonMistakes: coachResponse.commonMistakes,
-          oneThingToFix: coachResponse.oneThingToFix,
-          highlightBattle,
-          generatedAt: Date.now(),
-          model: WEEKLY_COACH_MODEL,
-          periodStartMs: endMs - WEEK,
-          periodEndMs: endMs,
-        };
+        return runWeeklyCoach(data, config.claudeApiKey, endMs - WEEK, endMs);
       },
     });
   });

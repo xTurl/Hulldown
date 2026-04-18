@@ -105,11 +105,14 @@ vi.mock('../main/services/claude', async () => {
   const actual = await vi.importActual<typeof import('../main/services/claude')>('../main/services/claude');
   return {
     callClaude: vi.fn(),
-    generateTankRecommendations: vi.fn(),
     sanitizeForPrompt: vi.fn((s: string) => s),
     withAICache: actual.withAICache,
   };
 });
+
+vi.mock('../main/ai/tank-recommendations', () => ({
+  generateTankRecommendations: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Imports AFTER mocks

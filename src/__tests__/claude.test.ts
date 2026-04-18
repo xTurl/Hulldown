@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { sanitizeForPrompt, generateTankRecommendations } from '../main/services/claude';
+import { sanitizeForPrompt } from '../main/services/claude';
+import { generateTankRecommendations } from '../main/ai/tank-recommendations';
 import type { Tank, MapStat } from '../shared/types';
 
 // ---------------------------------------------------------------------------

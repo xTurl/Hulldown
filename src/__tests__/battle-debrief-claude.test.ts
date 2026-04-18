@@ -17,7 +17,8 @@ vi.mock('@anthropic-ai/sdk', () => {
 });
 
 // Import AFTER mock
-import { callClaude, generateTankRecommendations } from '../main/services/claude';
+import { callClaude } from '../main/services/claude';
+import { generateTankRecommendations } from '../main/ai/tank-recommendations';
 import { z } from 'zod';
 import type { Tank } from '../shared/types';
 
