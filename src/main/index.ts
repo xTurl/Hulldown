@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import started from 'electron-squirrel-startup';
 import { registerHandlers } from './ipc/handlers';
-import { closeDb } from './services/cache';
+import { closeDb } from './services/db';
 
 if (started) app.quit();
 

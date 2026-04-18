@@ -2,6 +2,7 @@ import { app, ipcMain, shell, dialog } from 'electron';
 import path from 'path';
 import * as configService from '../services/config';
 import * as cacheService from '../services/cache';
+import * as analyticsService from '../services/analytics';
 import * as wgService from '../services/wargaming';
 import * as newsService from '../services/news';
 import * as patchesService from '../services/patches';
@@ -528,7 +529,7 @@ export function registerHandlers(): void {
       isCachedValid: (r) => Array.isArray(r.commonMistakes) && Array.isArray(r.focusTanks),
       saveCached: (r) => cacheService.saveWeeklyReport(config.accountId, isoWeek, r),
       compute: async () => {
-        const data = cacheService.getWeeklyCoachData(config.accountId, endMs);
+        const data = analyticsService.getWeeklyCoachData(config.accountId, endMs);
         if (data.thisWeek.battles === 0) {
           throw new Error("No battles this week — play some tanks first!");
         }

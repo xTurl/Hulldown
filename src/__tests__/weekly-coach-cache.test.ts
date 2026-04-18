@@ -388,10 +388,10 @@ import {
   saveWeeklyReport,
   clearWeeklyReports,
   listWeeklyReports,
-  getWeeklyCoachData,
   closeDb,
   insertBattles,
 } from '../main/services/cache';
+import { getWeeklyCoachData } from '../main/services/analytics';
 import type { BattleRecord, WeeklyCoachReport } from '../shared/types';
 
 // ---------------------------------------------------------------------------

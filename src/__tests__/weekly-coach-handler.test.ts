@@ -59,12 +59,15 @@ vi.mock('../main/services/replay-parser', () => ({
 }));
 vi.mock('../main/services/updater', () => ({ checkForUpdates: vi.fn(async () => null) }));
 
+vi.mock('../main/services/analytics', () => ({
+  getWeeklyCoachData: vi.fn(),
+}));
+
 // Cache mock
 vi.mock('../main/services/cache', () => ({
   getWeeklyReport: vi.fn(),
   saveWeeklyReport: vi.fn(),
   listWeeklyReports: vi.fn(() => []),
-  getWeeklyCoachData: vi.fn(),
   getBattleDebrief: vi.fn(() => null),
   saveBattleDebrief: vi.fn(),
   getBattleByArenaId: vi.fn(() => null),
@@ -118,6 +121,7 @@ vi.mock('../main/services/claude', async () => {
 // ---------------------------------------------------------------------------
 
 import * as cacheService from '../main/services/cache';
+import * as analyticsService from '../main/services/analytics';
 import * as configService from '../main/services/config';
 import * as claudeService from '../main/services/claude';
 import { registerHandlers } from '../main/ipc/handlers';
@@ -216,7 +220,7 @@ describe('coach:weekly-report handler', () => {
     });
 
     vi.mocked(cacheService.getWeeklyReport).mockReturnValue(null);
-    vi.mocked(cacheService.getWeeklyCoachData).mockReturnValue(mockCoachData);
+    vi.mocked(analyticsService.getWeeklyCoachData).mockReturnValue(mockCoachData);
     vi.mocked(claudeService.callClaude).mockResolvedValue(mockClaudeResponse);
   });
 
@@ -274,7 +278,7 @@ describe('coach:weekly-report handler', () => {
   });
 
   it('throws "No battles this week" when battles === 0', async () => {
-    vi.mocked(cacheService.getWeeklyCoachData).mockReturnValue({
+    vi.mocked(analyticsService.getWeeklyCoachData).mockReturnValue({
       ...mockCoachData,
       thisWeek: { ...mockCoachData.thisWeek, battles: 0 },
     });
