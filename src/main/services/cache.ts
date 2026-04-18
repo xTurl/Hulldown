@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import type { ProgressSnapshot, BattleDebrief, WeeklyCoachReport } from '../../shared/types';
+import type { ProgressSnapshot, BattleDebrief, WeeklyCoachReport, BattleRecord } from '../../shared/types';
+import { DAY, WEEK } from '../../shared/utils/time';
 
 let db: Database.Database | undefined;
 
@@ -275,7 +276,7 @@ export function getPartialBattles(accountId: number): Array<{ arenaId: string; p
 export function resolvePartialBattle(
   accountId: number,
   partialArenaId: string,
-  fullBattle: import('../types').BattleRecord,
+  fullBattle: BattleRecord,
 ): void {
   const db = getDb();
   db.transaction(() => {
@@ -295,15 +296,15 @@ const BATTLE_SELECT = `
   life_time as lifeTime, achievements
 `;
 
-function mapBattle(r: Record<string, unknown>): import('../types').BattleRecord {
+function mapBattle(r: Record<string, unknown>): BattleRecord {
   return {
     ...r,
     survived: r.survived === 1,
     achievements: typeof r.achievements === 'string' ? JSON.parse(r.achievements) : [],
-  } as import('../types').BattleRecord;
+  } as BattleRecord;
 }
 
-export function insertBattles(battles: import('../types').BattleRecord[]): void {
+export function insertBattles(battles: BattleRecord[]): void {
   const stmt = getDb().prepare(`
     INSERT OR IGNORE INTO battles
       (account_id, arena_id, played_at, tank_key, tank_name, map_name, battle_type,
@@ -312,7 +313,7 @@ export function insertBattles(battles: import('../types').BattleRecord[]): void 
        repair_cost, net_credits, mark_of_mastery, marks_on_gun, life_time, achievements)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const insertMany = getDb().transaction((rows: import('../types').BattleRecord[]) => {
+  const insertMany = getDb().transaction((rows: BattleRecord[]) => {
     for (const b of rows) {
       stmt.run(
         b.accountId, b.arenaId, b.playedAt, b.tankKey, b.tankName, b.mapName, b.battleType,
@@ -333,7 +334,7 @@ export function insertBattles(battles: import('../types').BattleRecord[]): void 
   }
 }
 
-export function getBattleByArenaId(accountId: number, arenaId: string): import('../types').BattleRecord | null {
+export function getBattleByArenaId(accountId: number, arenaId: string): BattleRecord | null {
   const row = getDb()
     .prepare(`SELECT ${BATTLE_SELECT} FROM battles WHERE account_id = ? AND arena_id = ?`)
     .get(accountId, arenaId) as Record<string, unknown> | undefined;
@@ -341,7 +342,7 @@ export function getBattleByArenaId(accountId: number, arenaId: string): import('
   return mapBattle(row);
 }
 
-export function getBattles(accountId: number, limit = 10, offset = 0): import('../types').BattleRecord[] {
+export function getBattles(accountId: number, limit = 10, offset = 0): BattleRecord[] {
   return (getDb()
     .prepare(`SELECT ${BATTLE_SELECT} FROM battles WHERE account_id = ? ORDER BY played_at DESC LIMIT ? OFFSET ?`)
     .all(accountId, limit, offset) as Record<string, unknown>[])
@@ -874,10 +875,9 @@ function computeWeekTotals(accountId: number, startMs: number, endMs: number): W
 
 export function getWeeklyCoachData(accountId: number, endMs: number): WeeklyCoachData {
   const db = getDb();
-  const WEEK_MS = 7 * 24 * 3600 * 1000;
-  const thisWeekStart = endMs - WEEK_MS;
-  const priorWeekStart = endMs - 2 * WEEK_MS;
-  const priorMonthStart = endMs - 37 * 24 * 3600 * 1000; // prior month baseline for tank comparisons
+  const thisWeekStart = endMs - WEEK;
+  const priorWeekStart = endMs - 2 * WEEK;
+  const priorMonthStart = endMs - 37 * DAY; // prior month baseline for tank comparisons
 
   // --- This week & prior week totals ---
   const thisWeek = computeWeekTotals(accountId, thisWeekStart, endMs);
@@ -994,7 +994,7 @@ export function getWeeklyCoachData(accountId: number, endMs: number): WeeklyCoac
            ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate
     FROM battles
     WHERE account_id = ? AND result != 'incomplete' AND played_at >= ? AND played_at < ?
-  `).get(accountId, endMs - 30 * 24 * 3600 * 1000, thisWeekStart) as Record<string, number> | undefined;
+  `).get(accountId, endMs - 30 * DAY, thisWeekStart) as Record<string, number> | undefined;
 
   const thirtyDayBaseline: ThirtyDayBaseline = {
     battles: baselineRow?.battles ?? 0,

@@ -14,8 +14,9 @@ import type { Tank, TankDetails, BattleRecord, BattleDebrief, WeeklyCoachReport 
 import { z } from 'zod';
 import { callClaude } from '../services/claude';
 import { getIsoWeek } from '../../shared/utils/dates';
+import { MINUTE, HOUR, DAY, WEEK } from '../../shared/utils/time';
 
-const ONE_HOUR = 60 * 60 * 1000;
+const ONE_HOUR = HOUR;
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 
 // In-memory cache for expensive WG API responses — cleared on app restart or manual cache clear
@@ -28,7 +29,7 @@ let pendingWgData: Promise<{ tankStats: wgService.WgTankStat[]; encyclopedia: Re
 // WN8 expected values cache (XVM) — 24 h TTL, best-effort (null = unavailable)
 let memWn8Exp: Map<number, wgService.Wn8ExpEntry> | null = null;
 let memWn8ExpFetchedAt = 0;
-const WN8_EXP_TTL = 24 * ONE_HOUR;
+const WN8_EXP_TTL = DAY;
 
 // name → tankId reverse lookup built from encyclopedia
 let memNameToTankId: Map<string, number> | null = null;
@@ -397,7 +398,7 @@ export function registerHandlers(): void {
   const DEBRIEF_MODEL = 'claude-haiku-4-5-20251001';
   const DEBRIEF_MAX_TOKENS = 800;
   const DEBRIEF_SYSTEM = `You are a tactical World of Tanks coach analyzing a single battle. Be specific. Reference actual numbers from the data provided. Avoid generic advice like "play better" or "do more damage". Output strict JSON matching this schema exactly: {"summary": string, "wentWell": string[], "wentWrong": string[], "tips": string[]}`;
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const THIRTY_DAYS_MS = 30 * DAY;
 
   handle('battle:debrief', async (arenaIdRaw, forceRaw) => {
     const arenaId = assertString(arenaIdRaw, 'arenaId');
@@ -606,7 +607,7 @@ Output strict JSON:
       highlightBattle,
       generatedAt: Date.now(),
       model: WEEKLY_COACH_MODEL,
-      periodStartMs: endMs - 7 * 24 * 3600 * 1000,
+      periodStartMs: endMs - WEEK,
       periodEndMs: endMs,
     };
 
@@ -616,7 +617,8 @@ Output strict JSON:
 
   handle('coach:report-history', (limitRaw) => {
     const config = configService.getConfig();
-    const limit = assertOptionalNumber(limitRaw, 'limit', 10);
+    const limitRequested = assertOptionalNumber(limitRaw, 'limit', 10);
+    const limit = Math.max(1, Math.min(limitRequested, 100));
     return cacheService.listWeeklyReports(config.accountId, limit);
   });
 
@@ -694,7 +696,7 @@ Output strict JSON:
     // time, not the file write time — a battle that started 14 min before the last
     // scan and ended after it would be permanently missed with a shorter buffer.
     // INSERT OR IGNORE handles any re-processed duplicates.
-    const sinceMs = lastScanTime > 0 ? lastScanTime - 30 * 60 * 1000 : undefined;
+    const sinceMs = lastScanTime > 0 ? lastScanTime - 30 * MINUTE : undefined;
     // For incremental scans, skip loading all arena IDs from SQLite — the filename-date
     // filter already limits parsing to recent files, and INSERT OR IGNORE handles any
     // accidental duplicates. Loading 100k+ IDs on every restart is what caused the

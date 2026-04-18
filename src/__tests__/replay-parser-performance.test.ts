@@ -5,11 +5,13 @@ import type { DetectedPlayer } from '../main/services/replay-parser';
 // fs mock — must be hoisted before importing the module under test
 // ---------------------------------------------------------------------------
 
-const mockReaddirSync = vi.fn<() => string[]>();
-const mockReaddirAsync = vi.fn<() => Promise<string[]>>();
-const mockOpenSync = vi.fn<() => number>();
-const mockReadSync = vi.fn<() => number>();
-const mockCloseSync = vi.fn<() => void>();
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const mockReaddirSync = vi.fn<(...args: any[]) => string[]>();
+const mockReaddirAsync = vi.fn<(...args: any[]) => Promise<string[]>>();
+const mockOpenSync = vi.fn<(...args: any[]) => number>();
+const mockReadSync = vi.fn<(...args: any[]) => number>();
+const mockCloseSync = vi.fn<(...args: any[]) => void>();
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 vi.mock('fs', () => ({
   default: {

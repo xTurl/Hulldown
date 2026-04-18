@@ -1,4 +1,4 @@
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, BattleRecord, UpdateInfo, BattleDebrief, WeeklyCoachReport } from './index';
+import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief, WeeklyCoachReport } from './index';
 import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession } from '../../main/services/cache';
 import type { DetectedPlayer } from '../../main/services/replay-parser';
 
@@ -17,12 +17,12 @@ declare global {
       getCacheStats(): Promise<CacheStats>;
       getProgress(): Promise<ProgressSnapshot[]>;
       getNews(): Promise<NewsItem[]>;
+      getPatches(): Promise<PatchItem[]>;
       clearBattles(): Promise<void>;
-      scanReplays(): Promise<{ added: number; skipped: number; errors: number }>;
+      scanReplays(quick?: boolean): Promise<{ added: number; skipped: number; errors: number }>;
       getTodaySession(): Promise<TodaySession | null>;
       detectPlayer(): Promise<DetectedPlayer | null>;
       detectAllPlayers(): Promise<DetectedPlayer[]>;
-      updateBattle(id: number, damage: number, assist: number, kills: number, result: 'win' | 'loss' | 'draw'): Promise<void>;
       getTankMapStats(tankName: string): Promise<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]>;
       getBattles(limit?: number, offset?: number): Promise<BattleRecord[]>;
       getBattlesCount(): Promise<number>;

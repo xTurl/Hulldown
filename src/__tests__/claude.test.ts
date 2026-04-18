@@ -87,6 +87,7 @@ const baseTank: Tank = {
   winRate: 56.0,
   wn8: 2100,
   wnx: 2200,
+  hasExpectedValues: true,
   avgDamage: 3100,
   avgDamageAssisted: 200,
   avgDamageAssistedTrack: 50,
