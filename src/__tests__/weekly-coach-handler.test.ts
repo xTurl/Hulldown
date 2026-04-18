@@ -102,12 +102,16 @@ vi.mock('../main/services/cache', () => ({
   resolvePartialBattle: vi.fn(),
 }));
 
-// Claude mock
-vi.mock('../main/services/claude', () => ({
-  callClaude: vi.fn(),
-  generateTankRecommendations: vi.fn(),
-  sanitizeForPrompt: vi.fn((s: string) => s),
-}));
+// Claude mock — real withAICache so cache flow is actually exercised.
+vi.mock('../main/services/claude', async () => {
+  const actual = await vi.importActual<typeof import('../main/services/claude')>('../main/services/claude');
+  return {
+    callClaude: vi.fn(),
+    generateTankRecommendations: vi.fn(),
+    sanitizeForPrompt: vi.fn((s: string) => s),
+    withAICache: actual.withAICache,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Imports AFTER mocks

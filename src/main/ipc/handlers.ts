@@ -12,9 +12,10 @@ import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
 import type { Tank, TankDetails, BattleRecord, BattleDebrief, WeeklyCoachReport } from '../../shared/types';
 import { z } from 'zod';
-import { callClaude } from '../services/claude';
+import { callClaude, withAICache } from '../services/claude';
 import { getIsoWeek } from '../../shared/utils/dates';
 import { MINUTE, HOUR, DAY, WEEK } from '../../shared/utils/time';
+import { BATTLE_DEBRIEF_SYSTEM, WEEKLY_COACH_SYSTEM } from '../prompts';
 
 const ONE_HOUR = HOUR;
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
@@ -397,7 +398,6 @@ export function registerHandlers(): void {
 
   const DEBRIEF_MODEL = 'claude-haiku-4-5-20251001';
   const DEBRIEF_MAX_TOKENS = 800;
-  const DEBRIEF_SYSTEM = `You are a tactical World of Tanks coach analyzing a single battle. Be specific. Reference actual numbers from the data provided. Avoid generic advice like "play better" or "do more damage". Output strict JSON matching this schema exactly: {"summary": string, "wentWell": string[], "wentWrong": string[], "tips": string[]}`;
   const THIRTY_DAYS_MS = 30 * DAY;
 
   handle('battle:debrief', async (arenaIdRaw, forceRaw) => {
@@ -407,93 +407,88 @@ export function registerHandlers(): void {
     const config = configService.getConfig();
     if (!config.claudeApiKey) throw new Error('AI not configured. Please set your Claude API key in Settings.');
 
-    // Cache hit (skip if forced)
-    if (!force) {
-      const cached = cacheService.getBattleDebrief(arenaId);
-      if (cached) return cached;
-    }
+    return withAICache<BattleDebrief>({
+      force,
+      getCached: () => cacheService.getBattleDebrief(arenaId),
+      saveCached: (d) => cacheService.saveBattleDebrief(arenaId, config.accountId, d),
+      compute: async () => {
+        const battle = cacheService.getBattleByArenaId(config.accountId, arenaId);
+        if (!battle) throw new Error('Battle not found');
+        if (battle.result === 'incomplete') throw new Error('Cannot debrief an incomplete battle');
 
-    // Load battle record from DB
-    const battle = cacheService.getBattleByArenaId(config.accountId, arenaId);
-    if (!battle) throw new Error('Battle not found');
-    if (battle.result === 'incomplete') throw new Error('Cannot debrief an incomplete battle');
+        // Gather expected values for this tank (same lookup chain as replays:list)
+        await Promise.all([getWn8Exp(), getWgData(config)]);
+        const extractedTag = extractVehicleTag(battle.tankKey);
+        const tankId = memTagToTankId?.get(extractedTag) ?? memNameToTankId?.get(battle.tankName);
+        const expEntry = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
+        const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
 
-    // Gather expected values for this tank (same lookup chain as replays:list)
-    await Promise.all([getWn8Exp(), getWgData(config)]);
-    const extractedTag = extractVehicleTag(battle.tankKey);
-    const tankId = memTagToTankId?.get(extractedTag) ?? memNameToTankId?.get(battle.tankName);
-    const expEntry = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
-    const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
+        const baseline = cacheService.getTankBaseline(config.accountId, battle.tankKey, THIRTY_DAYS_MS);
 
-    // Player 30-day baseline on this tank
-    const baseline = cacheService.getTankBaseline(config.accountId, battle.tankKey, THIRTY_DAYS_MS);
+        const expDmg = expEntry?.expDmg;
+        const dmgVsExpected = expDmg ? Math.round(((battle.damage - expDmg) / expDmg) * 100) : null;
+        const dmgVsBaseline = baseline && baseline.avgDamage > 0
+          ? Math.round(((battle.damage - baseline.avgDamage) / baseline.avgDamage) * 100)
+          : null;
 
-    // Build deltas vs expected values
-    const expDmg = expEntry?.expDmg;
-    const dmgVsExpected = expDmg ? Math.round(((battle.damage - expDmg) / expDmg) * 100) : null;
-    const dmgVsBaseline = baseline && baseline.avgDamage > 0
-      ? Math.round(((battle.damage - baseline.avgDamage) / baseline.avgDamage) * 100)
-      : null;
+        const userPayload = {
+          tank: {
+            name: battle.tankName.replace(/ v\d+$/, ''),
+            tier: vehicle?.tier ?? null,
+            type: vehicle?.type ?? null,
+            nation: vehicle?.nation ?? null,
+            isPremium: vehicle?.is_premium ?? null,
+          },
+          battle: {
+            damage: battle.damage,
+            assist: battle.assist,
+            blocked: battle.damageBlocked,
+            kills: battle.kills,
+            spotted: battle.spotted,
+            shots: battle.shots,
+            hits: battle.hits,
+            pens: battle.pens,
+            xp: battle.xp,
+            credits: battle.credits,
+            survived: battle.survived,
+            lifeTime: battle.lifeTime,
+            result: battle.result,
+            mapName: battle.mapName,
+            battleType: battle.battleType,
+            duration: battle.duration,
+            damageReceived: battle.damageReceived,
+            droppedCapture: battle.droppedCapture,
+            wn8: battle.wn8 ?? null,
+            wnx: battle.wnx ?? null,
+          },
+          expectedValues: expEntry
+            ? { expDmg: expEntry.expDmg, expFrag: expEntry.expFrag, expSpot: expEntry.expSpot, expDef: expEntry.expDef, expWinRate: Math.round(expEntry.expWinRate * 1000) / 10 }
+            : null,
+          playerBaseline30d: baseline,
+          deltas: {
+            dmgVsExpectedPct: dmgVsExpected,
+            dmgVsBaselinePct: dmgVsBaseline,
+            fragsVsBaseline: baseline ? Math.round((battle.kills - baseline.avgFrags) * 100) / 100 : null,
+            assistVsBaseline: baseline ? battle.assist - baseline.avgAssist : null,
+          },
+        };
 
-    const userPayload = {
-      tank: {
-        name: battle.tankName.replace(/ v\d+$/, ''),
-        tier: vehicle?.tier ?? null,
-        type: vehicle?.type ?? null,
-        nation: vehicle?.nation ?? null,
-        isPremium: vehicle?.is_premium ?? null,
+        const debriefResponse = await callClaude({
+          apiKey: config.claudeApiKey,
+          model: DEBRIEF_MODEL,
+          system: BATTLE_DEBRIEF_SYSTEM,
+          user: JSON.stringify(userPayload),
+          maxTokens: DEBRIEF_MAX_TOKENS,
+          schema: BattleDebriefResponseSchema,
+        });
+
+        return {
+          ...debriefResponse,
+          generatedAt: Date.now(),
+          model: DEBRIEF_MODEL,
+        };
       },
-      battle: {
-        damage: battle.damage,
-        assist: battle.assist,
-        blocked: battle.damageBlocked,
-        kills: battle.kills,
-        spotted: battle.spotted,
-        shots: battle.shots,
-        hits: battle.hits,
-        pens: battle.pens,
-        xp: battle.xp,
-        credits: battle.credits,
-        survived: battle.survived,
-        lifeTime: battle.lifeTime,
-        result: battle.result,
-        mapName: battle.mapName,
-        battleType: battle.battleType,
-        duration: battle.duration,
-        damageReceived: battle.damageReceived,
-        droppedCapture: battle.droppedCapture,
-        wn8: battle.wn8 ?? null,
-        wnx: battle.wnx ?? null,
-      },
-      expectedValues: expEntry
-        ? { expDmg: expEntry.expDmg, expFrag: expEntry.expFrag, expSpot: expEntry.expSpot, expDef: expEntry.expDef, expWinRate: Math.round(expEntry.expWinRate * 1000) / 10 }
-        : null,
-      playerBaseline30d: baseline,
-      deltas: {
-        dmgVsExpectedPct: dmgVsExpected,
-        dmgVsBaselinePct: dmgVsBaseline,
-        fragsVsBaseline: baseline ? Math.round((battle.kills - baseline.avgFrags) * 100) / 100 : null,
-        assistVsBaseline: baseline ? battle.assist - baseline.avgAssist : null,
-      },
-    };
-
-    const debriefResponse = await callClaude({
-      apiKey: config.claudeApiKey,
-      model: DEBRIEF_MODEL,
-      system: DEBRIEF_SYSTEM,
-      user: JSON.stringify(userPayload),
-      maxTokens: DEBRIEF_MAX_TOKENS,
-      schema: BattleDebriefResponseSchema,
     });
-
-    const debrief: BattleDebrief = {
-      ...debriefResponse,
-      generatedAt: Date.now(),
-      model: DEBRIEF_MODEL,
-    };
-
-    cacheService.saveBattleDebrief(arenaId, config.accountId, debrief);
-    return debrief;
   });
 
   // ---------------------------------------------------------------------------
@@ -517,28 +512,6 @@ export function registerHandlers(): void {
 
   const WEEKLY_COACH_MODEL = 'claude-sonnet-4-6';
   const WEEKLY_COACH_MAX_TOKENS = 2000;
-  const WEEKLY_COACH_SYSTEM = `You are a World of Tanks performance coach. You get 7 days of the player's battle data and must output ACTIONABLE advice — what to play, where to play it, what to stop. No generic platitudes, no listing of metrics the player can read themselves.
-
-CRITICAL OUTPUT RULE: Every string visible to the player (summary, reason, tip, pattern, evidence, fix, oneThingToFix, delta) MUST use plain, natural English. NEVER include raw data field names, camelCase identifiers, or programming-style tokens (e.g. "avgDmgReceived", "earlyDeathRate", "avgDmgBlocked", "avgLifeTimeSec", "survivalRate", "priorWeek", "thirtyDayBaseline", "winRate"). Translate them to human labels: "damage taken", "early deaths", "damage blocked", "time alive", "survival rate", "last week", "30-day average", "win rate". The player should never see internal variable names.
-
-RULES:
-- summary: ONE line, max 140 chars. A headline, not a paragraph. Mention the single most important trend with its number.
-- focusTanks (1-3): tanks the player should keep grinding next week. Pick from topImprovers or tanks with strong win rate + high battle count. "delta" is a short metric like "+450 dmg" or "62% WR". "reason" is one short line explaining why to grind it (numbers-backed, max ~15 words).
-- restTanks (0-2): tanks dragging stats down. Pick from topDecliners with ≥5 battles. If none, return []. "delta" is the negative number like "-220 dmg". "reason" explains the drop concretely in plain English.
-- mapPlaybook (0-3): pick 1-3 maps from bestMaps where the player does well. "tip" is ONE concrete tactical line leveraging the map's known geography (e.g. "Prokhorovka: push the 1-line with your mediums, use the rail embankment for gun depression"). Use real tactical concepts from WoT map meta. Keep each tip under 25 words.
-- mapsToAvoid (0-3): pick from worstMaps with win rate < 45%. "reason" must cite the numbers in plain English ("3 battles, 33% win rate, 1,100 avg damage").
-- commonMistakes (1-3): derive BEHAVIORAL patterns from this week's stats compared to last week or the 30-day baseline. Each mistake has:
-  * "pattern" — the behavior in plain language (e.g. "Dying too early", "Taking too much damage", "Poor armor angling", "Not scouting enough")
-  * "evidence" — the concrete number in plain English that proves it. GOOD: "Early deaths at 45% — nearly half your deaths happen before the 3-minute mark", "Taking 2,400 damage per battle vs 1,800 last week — 33% more taken". BAD: "earlyDeathRate 45%", "avgDmgReceived 2400 vs priorWeek 1800".
-  * "fix" — ONE imperative sentence telling them what to do differently
-  Signals to watch (use these internally, translate to plain English in output): early-death rate > 35% = YOLO; survival rate < 20% = dying too much; damage blocked less than half of damage taken on heavies = bad angling; average time alive under 3 minutes = rushing in. Only flag mistakes backed by REAL numbers — don't invent.
-- oneThingToFix: ONE imperative sentence in plain English. The single highest-impact change, backed by a number. DIFFERENT from commonMistakes — this is the ONE priority across all issues.
-- highlightArenaId: echo the arenaId of highlightBattleCandidate if it's worth highlighting (damage clearly above the week's average), else null.
-
-Do NOT list every metric. Do NOT pad with fluff. Do NOT leak internal field names. If data is thin (<20 battles), return shorter arrays — do not invent advice.
-
-Output strict JSON:
-{"summary","focusTanks":[{tankName,delta,reason}],"restTanks":[{tankName,delta,reason}],"mapPlaybook":[{mapName,winRate,tip}],"mapsToAvoid":[{mapName,winRate,reason}],"commonMistakes":[{pattern,evidence,fix}],"oneThingToFix","highlightArenaId"}`;
 
   handle('coach:weekly-report', async (forceRaw) => {
     const force = forceRaw === true;
@@ -548,71 +521,68 @@ Output strict JSON:
     const endMs = Date.now();
     const isoWeek = getIsoWeek(endMs);
 
-    // Cache hit — ignore reports saved before the current schema
-    // (e.g., missing commonMistakes) so they regenerate instead of crashing the UI.
-    if (!force) {
-      const cached = cacheService.getWeeklyReport(config.accountId, isoWeek);
-      if (cached && Array.isArray(cached.commonMistakes) && Array.isArray(cached.focusTanks)) {
-        return cached;
-      }
-    }
+    return withAICache<WeeklyCoachReport>({
+      force,
+      getCached: () => cacheService.getWeeklyReport(config.accountId, isoWeek),
+      // Reject pre-schema-bump reports (missing commonMistakes / focusTanks) so they regenerate.
+      isCachedValid: (r) => Array.isArray(r.commonMistakes) && Array.isArray(r.focusTanks),
+      saveCached: (r) => cacheService.saveWeeklyReport(config.accountId, isoWeek, r),
+      compute: async () => {
+        const data = cacheService.getWeeklyCoachData(config.accountId, endMs);
+        if (data.thisWeek.battles === 0) {
+          throw new Error("No battles this week — play some tanks first!");
+        }
 
-    const data = cacheService.getWeeklyCoachData(config.accountId, endMs);
-    if (data.thisWeek.battles === 0) {
-      throw new Error("No battles this week — play some tanks first!");
-    }
+        const userPayload = {
+          thisWeek: data.thisWeek,
+          priorWeek: data.priorWeek,
+          progressDelta: data.progressDelta,
+          thirtyDayBaseline: data.thirtyDayBaseline,
+          topImprovers: data.topImprovers,
+          topDecliners: data.topDecliners,
+          bestMaps: data.bestMaps,
+          worstMaps: data.worstMaps,
+          highlightBattleCandidate: data.highlightBattle,
+        };
 
-    const userPayload = {
-      thisWeek: data.thisWeek,
-      priorWeek: data.priorWeek,
-      progressDelta: data.progressDelta,
-      thirtyDayBaseline: data.thirtyDayBaseline,
-      topImprovers: data.topImprovers,
-      topDecliners: data.topDecliners,
-      bestMaps: data.bestMaps,
-      worstMaps: data.worstMaps,
-      highlightBattleCandidate: data.highlightBattle,
-    };
+        const coachResponse = await callClaude({
+          apiKey: config.claudeApiKey,
+          model: WEEKLY_COACH_MODEL,
+          system: WEEKLY_COACH_SYSTEM,
+          user: JSON.stringify(userPayload, null, 2),
+          maxTokens: WEEKLY_COACH_MAX_TOKENS,
+          schema: WeeklyCoachResponseSchema,
+        });
 
-    const coachResponse = await callClaude({
-      apiKey: config.claudeApiKey,
-      model: WEEKLY_COACH_MODEL,
-      system: WEEKLY_COACH_SYSTEM,
-      user: JSON.stringify(userPayload, null, 2),
-      maxTokens: WEEKLY_COACH_MAX_TOKENS,
-      schema: WeeklyCoachResponseSchema,
+        // Reconstruct highlight battle from candidate + AI's arenaId pick (avoids Claude hallucinating stats)
+        const highlightBattle =
+          coachResponse.highlightArenaId && data.highlightBattle && coachResponse.highlightArenaId === data.highlightBattle.arenaId
+            ? {
+                arenaId: data.highlightBattle.arenaId,
+                tankName: data.highlightBattle.tankName,
+                mapName: data.highlightBattle.mapName,
+                damage: data.highlightBattle.damage,
+                frags: data.highlightBattle.frags,
+                result: data.highlightBattle.result as 'win' | 'loss' | 'draw',
+              }
+            : null;
+
+        return {
+          summary: coachResponse.summary,
+          focusTanks: coachResponse.focusTanks,
+          restTanks: coachResponse.restTanks,
+          mapPlaybook: coachResponse.mapPlaybook,
+          mapsToAvoid: coachResponse.mapsToAvoid,
+          commonMistakes: coachResponse.commonMistakes,
+          oneThingToFix: coachResponse.oneThingToFix,
+          highlightBattle,
+          generatedAt: Date.now(),
+          model: WEEKLY_COACH_MODEL,
+          periodStartMs: endMs - WEEK,
+          periodEndMs: endMs,
+        };
+      },
     });
-
-    // Reconstruct highlight battle from candidate + AI's arenaId pick (avoids Claude hallucinating stats)
-    const highlightBattle =
-      coachResponse.highlightArenaId && data.highlightBattle && coachResponse.highlightArenaId === data.highlightBattle.arenaId
-        ? {
-            arenaId: data.highlightBattle.arenaId,
-            tankName: data.highlightBattle.tankName,
-            mapName: data.highlightBattle.mapName,
-            damage: data.highlightBattle.damage,
-            frags: data.highlightBattle.frags,
-            result: data.highlightBattle.result as 'win' | 'loss' | 'draw',
-          }
-        : null;
-
-    const report: WeeklyCoachReport = {
-      summary: coachResponse.summary,
-      focusTanks: coachResponse.focusTanks,
-      restTanks: coachResponse.restTanks,
-      mapPlaybook: coachResponse.mapPlaybook,
-      mapsToAvoid: coachResponse.mapsToAvoid,
-      commonMistakes: coachResponse.commonMistakes,
-      oneThingToFix: coachResponse.oneThingToFix,
-      highlightBattle,
-      generatedAt: Date.now(),
-      model: WEEKLY_COACH_MODEL,
-      periodStartMs: endMs - WEEK,
-      periodEndMs: endMs,
-    };
-
-    cacheService.saveWeeklyReport(config.accountId, isoWeek, report);
-    return report;
   });
 
   handle('coach:report-history', (limitRaw) => {

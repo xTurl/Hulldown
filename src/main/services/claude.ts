@@ -86,6 +86,31 @@ export async function callClaude<T>(opts: {
   return result.data;
 }
 
+/**
+ * Cache-aware wrapper for expensive AI calls. Encapsulates the common pattern:
+ * read cache (unless forced) → validate → compute fresh → persist.
+ *
+ * `isCachedValid` is optional — use it to reject cached values that were
+ * produced before a schema bump, e.g. `(r) => Array.isArray(r.newField)`.
+ */
+export async function withAICache<R>(opts: {
+  force: boolean;
+  getCached: () => R | null;
+  isCachedValid?: (cached: R) => boolean;
+  compute: () => Promise<R>;
+  saveCached: (value: R) => void;
+}): Promise<R> {
+  if (!opts.force) {
+    const cached = opts.getCached();
+    if (cached && (!opts.isCachedValid || opts.isCachedValid(cached))) {
+      return cached;
+    }
+  }
+  const fresh = await opts.compute();
+  opts.saveCached(fresh);
+  return fresh;
+}
+
 // ---------------------------------------------------------------------------
 // Tank Recommendations — uses callClaude internally
 // ---------------------------------------------------------------------------
