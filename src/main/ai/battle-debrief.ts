@@ -22,6 +22,68 @@ export interface BattleDebriefContext {
   baseline: TankBaseline | null;
 }
 
+type DamageLabel = 'excellent' | 'solid' | 'average' | 'poor' | 'unknown';
+type SpottingLabel = 'excellent' | 'solid' | 'average' | 'low';
+type SurvivalLabel = 'survived' | 'earlyDeath' | 'midDeath' | 'lateDeath';
+type ArmorLabel = 'goodAngling' | 'decent' | 'poor' | 'notEngaged';
+type OverallLabel = 'excellent' | 'solid' | 'average' | 'poor';
+
+function computePerformanceLabels(
+  battle: BattleRecord,
+  expEntry: Wn8ExpEntry | undefined,
+  baseline: TankBaseline | null,
+): {
+  overallLabel: OverallLabel;
+  damageLabel: DamageLabel;
+  spottingLabel: SpottingLabel;
+  survivalLabel: SurvivalLabel;
+  armorLabel: ArmorLabel;
+} {
+  let damageLabel: DamageLabel;
+  if (expEntry?.expDmg && expEntry.expDmg > 0) {
+    const r = battle.damage / expEntry.expDmg;
+    damageLabel = r >= 1.5 ? 'excellent' : r >= 1.2 ? 'solid' : r >= 0.8 ? 'average' : 'poor';
+  } else if (baseline && baseline.avgDamage > 0) {
+    const r = battle.damage / baseline.avgDamage;
+    damageLabel = r >= 1.5 ? 'excellent' : r >= 1.2 ? 'solid' : r >= 0.8 ? 'average' : 'poor';
+  } else {
+    damageLabel = 'unknown';
+  }
+
+  const spottingLabel: SpottingLabel =
+    battle.assist >= 2500 || battle.spotted >= 6 ? 'excellent' :
+    battle.assist >= 1500 || battle.spotted >= 4 ? 'solid' :
+    battle.assist >= 500 || battle.spotted >= 2 ? 'average' :
+    'low';
+
+  const survivalLabel: SurvivalLabel = battle.survived
+    ? 'survived'
+    : battle.lifeTime < 120 ? 'earlyDeath'
+    : battle.lifeTime < 300 ? 'midDeath'
+    : 'lateDeath';
+
+  let armorLabel: ArmorLabel;
+  if (battle.damageReceived === 0) {
+    armorLabel = 'notEngaged';
+  } else {
+    const r = battle.damageBlocked / battle.damageReceived;
+    armorLabel = r >= 1.0 ? 'goodAngling' : r >= 0.5 ? 'decent' : 'poor';
+  }
+
+  let overallLabel: OverallLabel;
+  if (damageLabel === 'excellent' || spottingLabel === 'excellent') {
+    overallLabel = 'excellent';
+  } else if (damageLabel === 'solid' || (damageLabel === 'average' && spottingLabel === 'solid')) {
+    overallLabel = 'solid';
+  } else if (damageLabel === 'poor' && (spottingLabel === 'low' || spottingLabel === 'average') && !battle.survived) {
+    overallLabel = 'poor';
+  } else {
+    overallLabel = 'average';
+  }
+
+  return { overallLabel, damageLabel, spottingLabel, survivalLabel, armorLabel };
+}
+
 export async function runBattleDebrief(
   ctx: BattleDebriefContext,
   apiKey: string,
@@ -33,6 +95,8 @@ export async function runBattleDebrief(
   const dmgVsBaseline = baseline && baseline.avgDamage > 0
     ? Math.round(((battle.damage - baseline.avgDamage) / baseline.avgDamage) * 100)
     : null;
+
+  const performance = computePerformanceLabels(battle, expEntry, baseline);
 
   const userPayload = {
     tank: {
@@ -74,6 +138,7 @@ export async function runBattleDebrief(
       fragsVsBaseline: baseline ? Math.round((battle.kills - baseline.avgFrags) * 100) / 100 : null,
       assistVsBaseline: baseline ? battle.assist - baseline.avgAssist : null,
     },
+    performance,
   };
 
   const debriefResponse = await callClaude({

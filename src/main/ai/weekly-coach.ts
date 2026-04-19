@@ -24,12 +24,52 @@ const WeeklyCoachResponseSchema = z.object({
   highlightArenaId: z.string().nullable(),
 });
 
+type WeekNarrative = 'improving' | 'stable' | 'declining' | 'insufficient';
+
+function computeWeekPerformance(data: WeeklyCoachData): {
+  weekNarrative: WeekNarrative;
+  damageVsRefPct: number | null;
+  damageRefSource: 'priorWeek' | 'thirtyDayBaseline' | null;
+} {
+  const { thisWeek, priorWeek, progressDelta, thirtyDayBaseline } = data;
+
+  let dmgRef: number | null = null;
+  let refSource: 'priorWeek' | 'thirtyDayBaseline' | null = null;
+  if (priorWeek.battles >= 5 && priorWeek.avgDamage > 0) {
+    dmgRef = priorWeek.avgDamage;
+    refSource = 'priorWeek';
+  } else if (thirtyDayBaseline.avgDmg && thirtyDayBaseline.avgDmg > 0) {
+    dmgRef = thirtyDayBaseline.avgDmg;
+    refSource = 'thirtyDayBaseline';
+  }
+
+  if (dmgRef === null) {
+    return { weekNarrative: 'insufficient', damageVsRefPct: null, damageRefSource: null };
+  }
+
+  const dmgChangePct = Math.round(((thisWeek.avgDamage - dmgRef) / dmgRef) * 100);
+  const wn8Delta = progressDelta.wn8Delta ?? 0;
+
+  let weekNarrative: WeekNarrative;
+  if (dmgChangePct >= 10 || wn8Delta >= 150) {
+    weekNarrative = 'improving';
+  } else if (dmgChangePct <= -10 || wn8Delta <= -150) {
+    weekNarrative = 'declining';
+  } else {
+    weekNarrative = 'stable';
+  }
+
+  return { weekNarrative, damageVsRefPct: dmgChangePct, damageRefSource: refSource };
+}
+
 export async function runWeeklyCoach(
   data: WeeklyCoachData,
   apiKey: string,
   periodStartMs: number,
   periodEndMs: number,
 ): Promise<WeeklyCoachReport> {
+  const performance = computeWeekPerformance(data);
+
   const userPayload = {
     thisWeek: data.thisWeek,
     priorWeek: data.priorWeek,
@@ -40,6 +80,7 @@ export async function runWeeklyCoach(
     bestMaps: data.bestMaps,
     worstMaps: data.worstMaps,
     highlightBattleCandidate: data.highlightBattle,
+    performance,
   };
 
   const coachResponse = await callClaude({
