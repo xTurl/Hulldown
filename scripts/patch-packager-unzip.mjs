@@ -5,7 +5,6 @@
  * entry — packaging then stalls forever at "Copying files" with only
  * locales/da.pak in the temp dir. System unzip works reliably on all versions.
  */
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
