@@ -13,12 +13,19 @@ const nodeFile = path.join(
   repoRoot,
   'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
 );
+const rebuildCli = path.join(repoRoot, 'node_modules/@electron/rebuild/lib/cli.js');
 
-execFileSync(
-  path.join(repoRoot, 'node_modules/.bin/electron-rebuild'),
-  ['-f', '-w', 'better-sqlite3'],
-  { cwd: repoRoot, stdio: 'inherit' },
-);
+if (!fs.existsSync(rebuildCli)) {
+  console.error(`[ensure-native-deps] ERROR: ${rebuildCli} not found — run npm install`);
+  process.exit(1);
+}
+
+// Invoke the CLI via node — node_modules/.bin/electron-rebuild is a .cmd shim on
+// Windows and execFileSync cannot spawn it (ENOENT).
+execFileSync(process.execPath, [rebuildCli, '-f', '-w', 'better-sqlite3'], {
+  cwd: repoRoot,
+  stdio: 'inherit',
+});
 
 if (!fs.existsSync(nodeFile)) {
   console.error(`[ensure-native-deps] ERROR: missing ${nodeFile}`);
