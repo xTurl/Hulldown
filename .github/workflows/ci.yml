@@ -17,11 +17,15 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Skip electron-rebuild (postinstall) — native modules are not needed
-      # for lint / typecheck / unit tests, and rebuilding better-sqlite3
-      # doubles CI time.
+      # Skip postinstall (electron-rebuild) — better-sqlite3 native rebuild is not
+      # needed for lint / typecheck / unit tests. Still install the Electron
+      # binary because several test suites import main-process modules that
+      # load `electron` (config, device-id, db).
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
 
       - name: Lint
         run: npm run lint
