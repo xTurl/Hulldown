@@ -90,6 +90,9 @@ typings/
 
 # Electron-Forge
 out/
+out-test/
+out-test-raw/
+.tmp/
 
 # Vite build output
 dist/

@@ -6,6 +6,7 @@
 
 - AI features (battle debrief, weekly coach, tank tips) now work out of the box for every user via a free built-in AI proxy — a Cloudflare Worker in front of Groq, rate-limited per anonymous device and globally (see `worker/README.md`). Adding a Claude API key in Settings is now optional and bypasses the proxy for unlimited, higher-quality analysis.
 - Free-tier daily limits raised (50/day for debrief and tank tips, 20/day for weekly coach) now that the user base is small; the UI shows a "X free left today" counter next to each AI feature, backed by a new read-only `GET /v1/usage` Worker endpoint that doesn't consume quota
+- "What's new" modal after upgrades — curated release notes on first launch of a new version; first-time setup skips it; returning users with a replays folder configured land straight in the app (no setup wizard)
 
 **Security**
 

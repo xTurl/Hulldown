@@ -2,7 +2,7 @@ import type {
   RendererConfig, RendererConfigUpdate, PlayerInfo, Tank, TankDetails, CacheStats,
   ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief,
   WeeklyCoachReport, ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary,
-  TodaySession, DetectedPlayer, FreeAIUsageInfo,
+  TodaySession, DetectedPlayer, FreeAIUsageInfo, WhatsNewInfo,
 } from './index';
 
 declare global {
@@ -43,6 +43,8 @@ declare global {
       getWeeklyReport(force?: boolean): Promise<WeeklyCoachReport>;
       getReportHistory(limit?: number): Promise<{ isoWeek: string; createdAt: number }[]>;
       getAIUsage(): Promise<FreeAIUsageInfo | null>;
+      getWhatsNew(): Promise<WhatsNewInfo>;
+      markVersionSeen(): Promise<void>;
     };
   }
 }

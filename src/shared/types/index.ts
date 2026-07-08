@@ -4,6 +4,18 @@ export interface UpdateInfo {
   downloadUrl: string | null;
 }
 
+export interface ReleaseNote {
+  version: string;
+  title: string;
+  highlights: string[];
+}
+
+export interface WhatsNewInfo {
+  show: boolean;
+  currentVersion: string;
+  notes: ReleaseNote[];
+}
+
 export interface AppConfig {
   claudeApiKey: string;
   accountId: number;

@@ -1,15 +1,21 @@
 {
   "name": "hulldown",
   "productName": "hulldown",
-  "version": "1.11.1",
+  "version": "1.12.0",
   "description": "AI-Powered desktop app with your WoT statistics.",
   "main": ".vite/build/main.js",
   "private": true,
+  "engines": {
+    "node": ">=20 <26"
+  },
   "scripts": {
-    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "node scripts/patch-packager-unzip.mjs && electron-rebuild -f -w better-sqlite3",
     "start": "electron-forge start",
+    "start:packaged": "out/hulldown-linux-x64/hulldown",
     "package": "electron-forge package",
+    "package:clean": "rm -rf out/hulldown-linux-x64 out-test out/make .tmp \"$HOME/.cache/hulldown/packager-tmp\" /tmp/electron-packager",
     "make": "electron-forge make",
+    "make:deb": "electron-forge make --targets @electron-forge/maker-deb",
     "publish": "electron-forge publish",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

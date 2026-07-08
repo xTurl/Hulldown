@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
-import { MakerDeb } from '@electron-forge/maker-deb';
+// import { MakerDeb } from '@electron-forge/maker-deb';
 import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
@@ -24,7 +24,9 @@ const config: ForgeConfig = {
     ],
   },
   rebuildConfig: {
-    force: true,
+    // postinstall already rebuilds better-sqlite3; forcing on every package
+    // recompiles from source and can look hung for several minutes.
+    force: false,
   },
   hooks: {
     postPackage: async (_config, options) => {
@@ -53,8 +55,9 @@ const config: ForgeConfig = {
     new MakerSquirrel({
       setupIcon: path.resolve(__dirname, 'assets/icon.ico'),
     }),
-    new MakerZIP({}, ['darwin']),
-    new MakerDeb({ options: { icon: path.resolve(__dirname, 'assets/icon.png') } }),
+    new MakerZIP({}, ['darwin', 'linux']),
+    // .deb needs `dpkg` + `fakeroot` (Debian/Ubuntu builders). Use `npm run make:deb`.
+    // new MakerDeb({ options: { icon: path.resolve(__dirname, 'assets/icon.png') } }),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

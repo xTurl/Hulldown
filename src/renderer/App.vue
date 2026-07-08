@@ -7,7 +7,8 @@ import Sidebar from './components/Sidebar.vue';
 import Setup from './views/Setup.vue';
 import ScanToast from './components/ScanToast.vue';
 import ToastContainer from './components/ToastContainer.vue';
-import type { UpdateInfo } from '../shared/types';
+import WhatsNewModal from './components/WhatsNewModal.vue';
+import type { UpdateInfo, WhatsNewInfo } from '../shared/types';
 
 // Initialize theme as early as possible
 useThemeStore();
@@ -16,22 +17,63 @@ const configStore = useConfigStore();
 const playerStore = usePlayerStore();
 const needsSetup = ref(false);
 const updateInfo = ref<UpdateInfo | null>(null);
+const whatsNew = ref<WhatsNewInfo | null>(null);
+
+async function tryRecoverPlayerFromReplays() {
+  const cfg = configStore.config;
+  if (!cfg?.replaysDir?.trim() || (cfg.username && cfg.accountId)) return;
+
+  try {
+    const player = await window.api.detectPlayer();
+    if (player?.accountId && player.playerName) {
+      await configStore.saveConfig({
+        ...cfg,
+        username: player.playerName,
+        accountId: player.accountId,
+        region: player.region || cfg.region,
+      });
+    }
+  } catch (e) {
+    console.warn('[startup] Failed to auto-detect player from replays:', e);
+  }
+}
+
+async function maybeShowWhatsNew() {
+  try {
+    const info = await window.api.getWhatsNew();
+    if (info.show) whatsNew.value = info;
+  } catch {
+    // Non-critical — never block startup on release notes
+  }
+}
 
 onMounted(async () => {
   await configStore.loadConfig();
-  if (!configStore.config?.username || !configStore.config?.accountId) {
+
+  // Setup is only for users who haven't picked a replays folder yet. Returning
+  // users keep their folder across updates and should land straight in the app.
+  if (!configStore.config?.replaysDir?.trim()) {
     needsSetup.value = true;
     return;
   }
+
+  await tryRecoverPlayerFromReplays();
   await playerStore.fetchPlayerInfo();
-  // Check for updates in background — don't block app startup
+  await maybeShowWhatsNew();
+
   window.api.checkForUpdates().then(info => { updateInfo.value = info; }).catch(() => {});
 });
 
 async function onSetupComplete() {
   needsSetup.value = false;
   await configStore.loadConfig();
+  // First-time users shouldn't see a changelog on day one — just mark current.
+  await window.api.markVersionSeen();
   await playerStore.fetchPlayerInfo();
+}
+
+function closeWhatsNew() {
+  whatsNew.value = null;
 }
 
 async function openUpdate() {
@@ -61,6 +103,7 @@ async function openUpdate() {
 
     <ScanToast />
     <ToastContainer />
+    <WhatsNewModal :info="whatsNew" @close="closeWhatsNew" />
     <div class="flex flex-1 overflow-hidden">
       <Setup v-if="needsSetup" @complete="onSetupComplete" />
       <template v-else>

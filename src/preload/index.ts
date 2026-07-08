@@ -3,7 +3,7 @@ import type {
   RendererConfig, RendererConfigUpdate, PlayerInfo, Tank, TankDetails, CacheStats,
   ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief,
   WeeklyCoachReport, ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary,
-  TodaySession, DetectedPlayer, FreeAIUsageInfo,
+  TodaySession, DetectedPlayer, FreeAIUsageInfo, WhatsNewInfo,
 } from '../shared/types';
 
 /**
@@ -61,4 +61,6 @@ contextBridge.exposeInMainWorld('api', {
   getWeeklyReport: (force?: boolean): Promise<WeeklyCoachReport> => invoke('coach:weekly-report', force),
   getReportHistory: (limit?: number): Promise<{ isoWeek: string; createdAt: number }[]> => invoke('coach:report-history', limit),
   getAIUsage: (): Promise<FreeAIUsageInfo | null> => invoke('ai:usage'),
+  getWhatsNew: (): Promise<WhatsNewInfo> => invoke('app:whats-new'),
+  markVersionSeen: (): Promise<void> => invoke('app:mark-version-seen'),
 });

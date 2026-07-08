@@ -11,9 +11,11 @@ import * as replayScan from '../services/replay-scan';
 import * as updaterService from '../services/updater';
 import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { assertString, assertNumber, assertOptionalNumber, assertConfig } from './validators';
-import type { TankDetails, BattleDebrief, WeeklyCoachReport, FreeAIUsageInfo } from '../../shared/types';
+import type { TankDetails, BattleDebrief, WeeklyCoachReport, FreeAIUsageInfo, WhatsNewInfo } from '../../shared/types';
 import { withAICache } from '../services/claude';
 import { getFreeAIUsage } from '../services/free-ai';
+import * as appState from '../services/app-state';
+import { getReleaseNotesSince } from '../../shared/release-notes';
 import { generateTankRecommendations } from '../ai/tank-recommendations';
 import { runBattleDebrief } from '../ai/battle-debrief';
 import { runWeeklyCoach } from '../ai/weekly-coach';
@@ -450,6 +452,26 @@ export function registerHandlers(): void {
   });
 
   handle('app:version', () => app.getVersion());
+
+  // app:whats-new — release notes to show after an upgrade. Skipped when setup
+  // isn't done yet (no replays folder) or the user already acknowledged this
+  // version. First-time setup marks the version seen without showing the modal.
+  handle('app:whats-new', (): WhatsNewInfo => {
+    const currentVersion = app.getVersion();
+    const lastSeen = appState.getLastSeenVersion();
+    const { replaysDir } = configService.getConfig();
+
+    if (!replaysDir.trim() || lastSeen === currentVersion) {
+      return { show: false, currentVersion, notes: [] };
+    }
+
+    const notes = getReleaseNotesSince(lastSeen, currentVersion);
+    return { show: notes.length > 0, currentVersion, notes };
+  });
+
+  handle('app:mark-version-seen', () => {
+    appState.markVersionSeen(app.getVersion());
+  });
 
   handle('update:check', () => updaterService.checkForUpdates());
 
