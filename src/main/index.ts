@@ -21,7 +21,21 @@ const createWindow = () => {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
+      sandbox: true,
     },
+  });
+
+  // Never open new windows from the renderer — external links go through the
+  // validated shell:openExternal IPC channel instead.
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  // Block in-place navigation away from the app (the SPA uses hash routing,
+  // which does not trigger will-navigate).
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const devServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL;
+    const isDevReload = !!devServerUrl && url.startsWith(devServerUrl);
+    const isLocalFile = url.startsWith('file://');
+    if (!isDevReload && !isLocalFile) event.preventDefault();
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL && !app.isPackaged) {

@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
     resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
     define: {
       'process.env.WG_API_KEY': JSON.stringify(env.WG_API_KEY || ''),
+      'process.env.AI_PROXY_URL': JSON.stringify(env.AI_PROXY_URL || ''),
     },
     build: {
       rolldownOptions: {

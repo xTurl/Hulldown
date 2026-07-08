@@ -1,605 +1,69 @@
-import type { ProgressSnapshot, BattleDebrief, WeeklyCoachReport, BattleRecord } from '../../shared/types';
+/**
+ * Cache facade: single import point for the persistence layer.
+ *
+ * Implementation is split by concern:
+ * - repos/api-cache-repo.ts   — cached WG API responses + AI artifacts
+ * - repos/battles-repo.ts     — parsed battle CRUD + scan state
+ * - repos/snapshots-repo.ts   — progress snapshot history
+ * - battle-analytics.ts       — aggregate read-only queries over battles
+ */
 import { getDb } from './db';
+import * as battlesRepo from './repos/battles-repo';
 
 export { closeDb } from './db';
 
-const SNAPSHOT_SELECT = `
-  id, taken_at as takenAt, battles, wn8, wnx, win_rate as winRate,
-  raw_wins as rawWins, raw_damage as rawDamage, raw_frags as rawFrags,
-  raw_survived as rawSurvived, raw_xp as rawXp,
-  raw_spotted as rawSpotted, raw_dropped_cp as rawDroppedCp
-`;
+export {
+  getTankDetails, saveTankDetails,
+  getPlayerInfo, savePlayerInfo, clearPlayerInfoCache,
+  getWgDataCache, saveWgDataCache, clearWgDataCache,
+  getStats,
+  getBattleDebrief, saveBattleDebrief, clearBattleDebriefs,
+  getWeeklyReport, saveWeeklyReport, clearWeeklyReports, listWeeklyReports,
+} from './repos/api-cache-repo';
 
-export function getTankDetails(tankId: number): { data: unknown; updatedAt: number } | null {
-  const row = getDb().prepare('SELECT data, updated_at FROM tank_details WHERE tank_id = ?').get(tankId) as { data: string; updated_at: number } | undefined;
-  if (!row) return null;
-  return { data: JSON.parse(row.data), updatedAt: row.updated_at };
-}
+export {
+  getKnownArenaIds, invalidateKnownArenaIds, insertBattles,
+  getBattleByArenaId, getBattles, getBattlesCount,
+  cleanupPartialBattles, getPartialBattles, resolvePartialBattle,
+  getLastScanTime, setLastScanTime,
+  getUnresolvedAbandonedBattles,
+} from './repos/battles-repo';
 
-export function saveTankDetails(tankId: number, data: unknown): void {
-  getDb().prepare('INSERT OR REPLACE INTO tank_details (tank_id, data, updated_at) VALUES (?, ?, ?)').run(tankId, JSON.stringify(data), Date.now());
-}
+export {
+  getProgressSnapshots, getLastProgressSnapshot, saveProgressSnapshot,
+  backfillMissingWnx,
+} from './repos/snapshots-repo';
 
-export function getPlayerInfo(): { data: unknown; updatedAt: number } | null {
-  const row = getDb().prepare('SELECT data, updated_at FROM player_info WHERE id = 1').get() as { data: string; updated_at: number } | undefined;
-  if (!row) return null;
-  return { data: JSON.parse(row.data), updatedAt: row.updated_at };
-}
+export {
+  getRecentBattlesByTank, getReplayMapStats, getReplayTankStats,
+  getEconomyByDay, getTodaySession, getReplayTankContext,
+  getSessions, getTankBaseline,
+} from './battle-analytics';
 
-export function savePlayerInfo(data: unknown): void {
-  getDb().prepare('INSERT OR REPLACE INTO player_info (id, data, updated_at) VALUES (1, ?, ?)').run(JSON.stringify(data), Date.now());
-}
+export type { RecentTankGroup, ReplayTankContext, TankBaseline } from './battle-analytics';
 
-export function clearPlayerInfoCache(): void {
-  getDb().prepare('DELETE FROM player_info').run();
-}
+// Re-export for main-process consumers; canonical definitions live in shared/types
+export type {
+  ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession,
+} from '../../shared/types';
 
-export function clearAll(): void {
+/** Clears cached API responses and AI results, but keeps parsed battles (user data). */
+export function clearApiCaches(): void {
   getDb().exec('DELETE FROM tank_details; DELETE FROM player_info; DELETE FROM progress_snapshots; DELETE FROM wg_data_cache; DELETE FROM battle_debriefs; DELETE FROM weekly_reports;');
 }
 
+/** Full wipe: API caches AND the parsed battle database + scan state. */
+export function clearAll(): void {
+  clearApiCaches();
+  getDb().exec('DELETE FROM battles; DELETE FROM scan_state; DELETE FROM tank_stat_snapshots;');
+  battlesRepo.clearKnownArenaIdsCache();
+}
+
+/** Removes all battles and AI artifacts for one account (user-initiated reset). */
 export function clearBattles(accountId: number): void {
   const db = getDb();
-  db.prepare('DELETE FROM battles WHERE account_id = ?').run(accountId);
+  battlesRepo.deleteBattlesForAccount(accountId);
   db.prepare('DELETE FROM battle_debriefs WHERE account_id = ?').run(accountId);
   db.prepare('DELETE FROM weekly_reports WHERE account_id = ?').run(accountId);
-  knownArenaIdsCache.delete(accountId);
-}
-
-export function getProgressSnapshots(accountId: number): ProgressSnapshot[] {
-  return getDb()
-    .prepare(`SELECT ${SNAPSHOT_SELECT} FROM progress_snapshots WHERE account_id = ? ORDER BY taken_at ASC`)
-    .all(accountId) as ProgressSnapshot[];
-}
-
-export function getLastProgressSnapshot(accountId: number): ProgressSnapshot | null {
-  const row = getDb()
-    .prepare(`SELECT ${SNAPSHOT_SELECT} FROM progress_snapshots WHERE account_id = ? ORDER BY taken_at DESC LIMIT 1`)
-    .get(accountId) as ProgressSnapshot | undefined;
-  return row ?? null;
-}
-
-export function saveProgressSnapshot(snapshot: Omit<ProgressSnapshot, 'id'> & { accountId: number }): void {
-  getDb()
-    .prepare(`
-      INSERT INTO progress_snapshots
-        (account_id, taken_at, battles, wn8, wnx, win_rate,
-         raw_wins, raw_damage, raw_frags, raw_survived, raw_xp, raw_spotted, raw_dropped_cp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    .run(
-      snapshot.accountId, snapshot.takenAt, snapshot.battles, snapshot.wn8, snapshot.wnx, snapshot.winRate,
-      snapshot.rawWins, snapshot.rawDamage, snapshot.rawFrags,
-      snapshot.rawSurvived, snapshot.rawXp, snapshot.rawSpotted, snapshot.rawDroppedCp,
-    );
-}
-
-// In-memory cache: avoids re-fetching all 16k arena IDs from DB on every scan cycle.
-// Populated lazily on first call per account; updated incrementally after each insertBattles.
-const knownArenaIdsCache = new Map<number, Set<string>>();
-
-export function getKnownArenaIds(accountId: number): Set<string> {
-  const cached = knownArenaIdsCache.get(accountId);
-  if (cached) return cached;
-  const rows = getDb()
-    .prepare('SELECT arena_id FROM battles WHERE account_id = ?')
-    .all(accountId) as { arena_id: string }[];
-  const set = new Set(rows.map(r => r.arena_id));
-  knownArenaIdsCache.set(accountId, set);
-  return set;
-}
-
-/** Force a full DB reload for an account on the next getKnownArenaIds call. */
-export function invalidateKnownArenaIds(accountId: number): void {
-  knownArenaIdsCache.delete(accountId);
-}
-
-/**
- * Removes partial battles that now have a complete counterpart.
- *
- * WoT writes a 1-block replay when a player joins, then rewrites the same
- * file with block 2 (full stats) once the battle ends — even if the player
- * left early. The scan inserts the complete version under its real arenaUniqueID
- * while the original partial_<filename> record stays, causing duplicates.
- *
- * Matching key: same account + tank + played_at (both parsed from block0.dateTime
- * so they are always identical for the same file).
- *
- * Returns the number of stale partial records deleted.
- */
-export function cleanupPartialBattles(accountId: number): number {
-  const result = getDb().prepare(`
-    DELETE FROM battles
-    WHERE account_id = ? AND arena_id LIKE 'partial_%'
-    AND EXISTS (
-      SELECT 1 FROM battles b2
-      WHERE b2.account_id = battles.account_id
-        AND b2.tank_key   = battles.tank_key
-        AND b2.played_at  = battles.played_at
-        AND b2.arena_id   NOT LIKE 'partial_%'
-    )
-  `).run(accountId);
-  return result.changes;
-}
-
-/**
- * Returns all partial (incomplete) battle records for an account.
- * Used to match against temp.wotreplay on Windows where WoT doesn't
- * rewrite the dated replay file with full results for early-exit battles.
- */
-export function getPartialBattles(accountId: number): Array<{ arenaId: string; playedAt: number; tankKey: string }> {
-  return (getDb().prepare(`
-    SELECT arena_id as arenaId, played_at as playedAt, tank_key as tankKey
-    FROM battles WHERE account_id = ? AND arena_id LIKE 'partial_%'
-  `).all(accountId)) as Array<{ arenaId: string; playedAt: number; tankKey: string }>;
-}
-
-/**
- * Replaces a partial battle record with complete data from temp.wotreplay.
- * The partial record is deleted and the full record is inserted under the real arenaUniqueID.
- */
-export function resolvePartialBattle(
-  accountId: number,
-  partialArenaId: string,
-  fullBattle: BattleRecord,
-): void {
-  const db = getDb();
-  db.transaction(() => {
-    db.prepare('DELETE FROM battles WHERE account_id = ? AND arena_id = ?').run(accountId, partialArenaId);
-    insertBattles([fullBattle]);
-  })();
-}
-
-const BATTLE_SELECT = `
-  id, account_id as accountId, arena_id as arenaId, played_at as playedAt,
-  tank_key as tankKey, tank_name as tankName, map_name as mapName,
-  battle_type as battleType, result, damage, assist, kills, shots, hits, pens,
-  spotted, xp, credits, survived, duration, dropped_capture as droppedCapture,
-  damage_received as damageReceived, damage_blocked as damageBlocked,
-  repair_cost as repairCost, net_credits as netCredits,
-  mark_of_mastery as markOfMastery, marks_on_gun as marksOnGun,
-  life_time as lifeTime, achievements
-`;
-
-function mapBattle(r: Record<string, unknown>): BattleRecord {
-  return {
-    ...r,
-    survived: r.survived === 1,
-    achievements: typeof r.achievements === 'string' ? JSON.parse(r.achievements) : [],
-  } as BattleRecord;
-}
-
-export function insertBattles(battles: BattleRecord[]): void {
-  const stmt = getDb().prepare(`
-    INSERT OR IGNORE INTO battles
-      (account_id, arena_id, played_at, tank_key, tank_name, map_name, battle_type,
-       result, damage, assist, kills, shots, hits, pens, spotted, xp, credits,
-       survived, duration, dropped_capture, damage_received, damage_blocked,
-       repair_cost, net_credits, mark_of_mastery, marks_on_gun, life_time, achievements)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertMany = getDb().transaction((rows: BattleRecord[]) => {
-    for (const b of rows) {
-      stmt.run(
-        b.accountId, b.arenaId, b.playedAt, b.tankKey, b.tankName, b.mapName, b.battleType,
-        b.result, b.damage, b.assist, b.kills, b.shots, b.hits, b.pens, b.spotted,
-        b.xp, b.credits, b.survived ? 1 : 0, b.duration, b.droppedCapture ?? 0,
-        b.damageReceived ?? 0, b.damageBlocked ?? 0, b.repairCost ?? 0, b.netCredits ?? 0,
-        b.markOfMastery ?? 0, b.marksOnGun ?? 0, b.lifeTime ?? 0,
-        JSON.stringify(b.achievements ?? []),
-      );
-    }
-  });
-  insertMany(battles);
-  // Update the in-memory knownIds cache so the next scan doesn't re-query the DB.
-  // INSERT OR IGNORE means duplicates are silently dropped; adding to a Set is idempotent.
-  for (const b of battles) {
-    const cached = knownArenaIdsCache.get(b.accountId);
-    if (cached) cached.add(b.arenaId);
-  }
-}
-
-export function getBattleByArenaId(accountId: number, arenaId: string): BattleRecord | null {
-  const row = getDb()
-    .prepare(`SELECT ${BATTLE_SELECT} FROM battles WHERE account_id = ? AND arena_id = ?`)
-    .get(accountId, arenaId) as Record<string, unknown> | undefined;
-  if (!row) return null;
-  return mapBattle(row);
-}
-
-export function getBattles(accountId: number, limit = 10, offset = 0): BattleRecord[] {
-  return (getDb()
-    .prepare(`SELECT ${BATTLE_SELECT} FROM battles WHERE account_id = ? ORDER BY played_at DESC LIMIT ? OFFSET ?`)
-    .all(accountId, limit, offset) as Record<string, unknown>[])
-    .map(mapBattle);
-}
-
-export function getBattlesCount(accountId: number): number {
-  const row = getDb()
-    .prepare('SELECT COUNT(*) as count FROM battles WHERE account_id = ?')
-    .get(accountId) as { count: number };
-  return row.count;
-}
-
-export interface RecentTankGroup {
-  tankKey: string;
-  battles: number;
-  wins: number;
-  damage: number;
-  kills: number;
-  spotted: number;
-  dropped: number;
-  assist: number;
-}
-
-export function getRecentBattlesByTank(accountId: number, limit: number): RecentTankGroup[] {
-  return getDb().prepare(`
-    WITH recent AS (
-      SELECT * FROM battles
-      WHERE account_id = ? AND result != 'incomplete'
-      ORDER BY played_at DESC LIMIT ?
-    )
-    SELECT tank_key as tankKey,
-           COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           SUM(damage) as damage,
-           SUM(kills) as kills,
-           SUM(spotted) as spotted,
-           SUM(dropped_capture) as dropped,
-           SUM(assist) as assist
-    FROM recent
-    GROUP BY tank_key
-  `).all(accountId, limit) as RecentTankGroup[];
-}
-
-export interface ReplayMapStat {
-  mapName: string; battles: number; wins: number; winRate: number;
-  avgDamage: number; avgKills: number; avgAssist: number; avgSpotted: number;
-}
-
-export function getReplayMapStats(accountId: number, sinceMs: number): ReplayMapStat[] {
-  const cutoff = sinceMs > 0 ? Date.now() - sinceMs : 0;
-  return getDb().prepare(`
-    SELECT map_name as mapName, COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
-           ROUND(AVG(damage), 0) as avgDamage,
-           ROUND(AVG(kills), 2) as avgKills,
-           ROUND(AVG(assist), 0) as avgAssist,
-           ROUND(AVG(spotted), 2) as avgSpotted
-    FROM battles WHERE account_id = ? AND result != 'incomplete' AND (? = 0 OR played_at >= ?)
-    GROUP BY map_name ORDER BY battles DESC
-  `).all(accountId, cutoff, cutoff) as ReplayMapStat[];
-}
-
-export interface ReplayTankStat {
-  tankName: string; tankKey: string; battles: number; wins: number; winRate: number;
-  avgDamage: number; avgKills: number; avgAssist: number; avgBlocked: number;
-  netCredits: number; bestMastery: number;
-}
-
-export function getReplayTankStats(accountId: number, sinceMs: number): ReplayTankStat[] {
-  const cutoff = sinceMs > 0 ? Date.now() - sinceMs : 0;
-  return getDb().prepare(`
-    SELECT tank_name as tankName, tank_key as tankKey, COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
-           ROUND(AVG(damage), 0) as avgDamage,
-           ROUND(AVG(kills), 2) as avgKills,
-           ROUND(AVG(assist), 0) as avgAssist,
-           ROUND(AVG(damage_blocked), 0) as avgBlocked,
-           SUM(net_credits) as netCredits,
-           MAX(mark_of_mastery) as bestMastery
-    FROM battles WHERE account_id = ? AND result != 'incomplete' AND (? = 0 OR played_at >= ?)
-    GROUP BY tank_key ORDER BY battles DESC
-  `).all(accountId, cutoff, cutoff) as ReplayTankStat[];
-}
-
-export interface EconomyDay {
-  day: string; battles: number; wins: number;
-  netCredits: number; grossCredits: number; totalRepairs: number;
-}
-
-export function getEconomyByDay(accountId: number, days: number): EconomyDay[] {
-  const cutoff = days > 0 ? Date.now() - days * 86400000 : 0;
-  return getDb().prepare(`
-    SELECT strftime('%Y-%m-%d', played_at / 1000, 'unixepoch') as day,
-           COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           SUM(net_credits) as netCredits,
-           SUM(credits) as grossCredits,
-           SUM(repair_cost) as totalRepairs
-    FROM battles WHERE account_id = ? AND result != 'incomplete' AND (? = 0 OR played_at >= ?)
-    GROUP BY day ORDER BY day ASC
-  `).all(accountId, cutoff, cutoff) as EconomyDay[];
-}
-
-export interface SessionSummary {
-  sessionNum: number; startedAt: number; endedAt: number;
-  battles: number; wins: number; winRate: number;
-  avgDamage: number; avgKills: number; netCredits: number;
-  totalDamage: number; totalFrags: number; totalSpotted: number;
-  totalDropped: number; totalAssist: number;
-}
-
-export interface ReplayTankContext {
-  battles: number;
-  winRate: number;
-  avgDamage: number;
-  avgAssist: number;
-  accuracy: number;       // hits/shots %
-  penRate: number;        // pens/hits %
-  avgDmgReceived: number;
-  avgDmgBlocked: number;
-  avgLifePct: number;     // lifeTime/duration %
-  avgNetCredits: number;
-  bestMastery: number;
-  mapStats: { mapName: string; battles: number; winRate: number; avgDamage: number }[];
-}
-
-export interface TodaySession {
-  battles: number; wins: number; losses: number; winRate: number;
-  avgDamage: number; avgAssist: number; avgFrags: number; avgSpots: number;
-  survivalRate: number; tankCount: number;
-  totalDamage: number; totalWins: number; totalFrags: number;
-  totalSpotted: number; totalDropped: number; totalNetCredits: number;
-}
-
-export function getTodaySession(accountId: number): TodaySession | null {
-  const row = getDb().prepare(`
-    SELECT COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
-           ROUND(AVG(damage), 0) as avgDamage,
-           ROUND(AVG(assist), 0) as avgAssist,
-           ROUND(AVG(kills), 2) as avgFrags,
-           ROUND(AVG(spotted), 2) as avgSpots,
-           ROUND(AVG(CASE WHEN survived=1 THEN 100.0 ELSE 0 END), 1) as survivalRate,
-           COUNT(DISTINCT tank_key) as tankCount,
-           SUM(damage) as totalDamage, SUM(kills) as totalFrags,
-           SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped,
-           SUM(net_credits) as totalNetCredits
-    FROM battles
-    WHERE account_id = ?
-      AND result != 'incomplete'
-      AND date(played_at / 1000, 'unixepoch', 'localtime') = date('now', 'localtime')
-  `).get(accountId) as TodaySession & { battles: number } | undefined;
-  if (!row || row.battles === 0) return null;
-  return { ...row, totalWins: row.wins };
-}
-
-export function getReplayTankContext(
-  accountId: number,
-  tankName: string,
-  sinceMs = 30 * 86400000,
-): ReplayTankContext | null {
-  const cutoff = sinceMs > 0 ? Date.now() - sinceMs : 0;
-  const row = getDb().prepare(`
-    SELECT COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
-           ROUND(AVG(damage), 0) as avgDamage,
-           ROUND(AVG(assist), 0) as avgAssist,
-           ROUND(CAST(SUM(hits) AS REAL) / NULLIF(SUM(shots), 0) * 100, 1) as accuracy,
-           ROUND(CAST(SUM(pens) AS REAL) / NULLIF(SUM(hits), 0) * 100, 1) as penRate,
-           ROUND(AVG(damage_received), 0) as avgDmgReceived,
-           ROUND(AVG(damage_blocked), 0) as avgDmgBlocked,
-           ROUND(AVG(CAST(life_time AS REAL) / NULLIF(duration, 0) * 100), 1) as avgLifePct,
-           ROUND(AVG(net_credits), 0) as avgNetCredits,
-           MAX(mark_of_mastery) as bestMastery
-    FROM battles WHERE account_id = ? AND result != 'incomplete' AND tank_name = ? AND (? = 0 OR played_at >= ?)
-  `).get(accountId, tankName, cutoff, cutoff) as Record<string, number> | undefined;
-
-  if (!row || row.battles === 0) return null;
-
-  const maps = getDb().prepare(`
-    SELECT map_name as mapName, COUNT(*) as battles,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
-           ROUND(AVG(damage), 0) as avgDamage
-    FROM battles WHERE account_id = ? AND result != 'incomplete' AND tank_name = ?
-    GROUP BY map_name HAVING COUNT(*) >= 2
-    ORDER BY COUNT(*) DESC LIMIT 10
-  `).all(accountId, tankName) as { mapName: string; battles: number; winRate: number; avgDamage: number }[];
-
-  return {
-    battles:        row.battles,
-    winRate:        row.winRate,
-    avgDamage:      row.avgDamage,
-    avgAssist:      row.avgAssist,
-    accuracy:       row.accuracy ?? 0,
-    penRate:        row.penRate ?? 0,
-    avgDmgReceived: row.avgDmgReceived,
-    avgDmgBlocked:  row.avgDmgBlocked,
-    avgLifePct:     row.avgLifePct ?? 0,
-    avgNetCredits:  row.avgNetCredits,
-    bestMastery:    row.bestMastery ?? 0,
-    mapStats:       maps,
-  };
-}
-
-// TODO(perf): Replace the window-function approach with a session_id column populated at
-// INSERT time. This would eliminate the full-table scan entirely. Deferred because it requires
-// a schema migration and access to prev played_at during insertBattles.
-export function getSessions(accountId: number, limit = 20): SessionSummary[] {
-  // Cap the CTE at the most recent 2000 battles so the LAG+SUM window function never
-  // scans all 16k rows just to return `limit` sessions. 2000 battles covers ~100 sessions
-  // comfortably even for very long sessions, and the outer LIMIT ? keeps the final result small.
-  const CTE_LIMIT = 2000;
-  return getDb().prepare(`
-    WITH recent AS (
-      SELECT played_at, result, damage, kills, net_credits,
-             spotted, dropped_capture, assist
-      FROM battles WHERE account_id = ? AND result != 'incomplete'
-      ORDER BY played_at DESC LIMIT ${CTE_LIMIT}
-    ),
-    ordered AS (
-      SELECT *,
-             LAG(played_at) OVER (ORDER BY played_at) as prev_at
-      FROM recent
-    ),
-    with_session AS (
-      SELECT *,
-        SUM(CASE WHEN prev_at IS NULL OR played_at - prev_at > 1800000 THEN 1 ELSE 0 END)
-        OVER (ORDER BY played_at) as session_num
-      FROM ordered
-    )
-    SELECT session_num as sessionNum,
-           MIN(played_at) as startedAt, MAX(played_at) as endedAt,
-           COUNT(*) as battles,
-           SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate,
-           ROUND(AVG(damage), 0) as avgDamage,
-           ROUND(AVG(kills), 2) as avgKills,
-           SUM(net_credits) as netCredits,
-           SUM(damage) as totalDamage, SUM(kills) as totalFrags,
-           SUM(spotted) as totalSpotted, SUM(dropped_capture) as totalDropped,
-           SUM(assist) as totalAssist
-    FROM with_session
-    GROUP BY session_num ORDER BY session_num DESC LIMIT ?
-  `).all(accountId, limit) as SessionSummary[];
-}
-
-export function getWgDataCache(accountId: number): { tankStats: unknown; encyclopedia: unknown; updatedAt: number } | null {
-  const row = getDb()
-    .prepare('SELECT tank_stats, encyclopedia, updated_at FROM wg_data_cache WHERE account_id = ?')
-    .get(accountId) as { tank_stats: string; encyclopedia: string; updated_at: number } | undefined;
-  if (!row) return null;
-  return {
-    tankStats:   JSON.parse(row.tank_stats),
-    encyclopedia: JSON.parse(row.encyclopedia),
-    updatedAt:   row.updated_at,
-  };
-}
-
-export function saveWgDataCache(accountId: number, tankStats: unknown, encyclopedia: unknown): void {
-  getDb()
-    .prepare('INSERT OR REPLACE INTO wg_data_cache (account_id, tank_stats, encyclopedia, updated_at) VALUES (?, ?, ?, ?)')
-    .run(accountId, JSON.stringify(tankStats), JSON.stringify(encyclopedia), Date.now());
-}
-
-export function clearWgDataCache(accountId: number): void {
-  getDb().prepare('DELETE FROM wg_data_cache WHERE account_id = ?').run(accountId);
-}
-
-export function getLastScanTime(accountId: number): number {
-  const row = getDb()
-    .prepare('SELECT last_scan_at FROM scan_state WHERE account_id = ?')
-    .get(accountId) as { last_scan_at: number } | undefined;
-  return row?.last_scan_at ?? 0;
-}
-
-export function setLastScanTime(accountId: number, time: number): void {
-  getDb()
-    .prepare('INSERT OR REPLACE INTO scan_state (account_id, last_scan_at) VALUES (?, ?)')
-    .run(accountId, time);
-}
-
-export function backfillMissingWnx(wnx: number): void {
-  getDb()
-    .prepare('UPDATE progress_snapshots SET wnx = ? WHERE wnx = 0')
-    .run(wnx);
-}
-
-export function getStats(): { tanks: number; lastSync: string | null } {
-  const tanksRow = getDb().prepare('SELECT COUNT(*) as count FROM tank_details').get() as { count: number };
-  const syncRow = getDb().prepare('SELECT MAX(updated_at) as last FROM tank_details').get() as { last: number | null };
-  return {
-    tanks: tanksRow.count,
-    lastSync: syncRow.last ? new Date(syncRow.last).toLocaleString('en-US') : null,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Battle Debriefs
-// ---------------------------------------------------------------------------
-
-export function getBattleDebrief(arenaId: string): BattleDebrief | null {
-  const row = getDb()
-    .prepare('SELECT json FROM battle_debriefs WHERE arena_id = ?')
-    .get(arenaId) as { json: string } | undefined;
-  if (!row) return null;
-  return JSON.parse(row.json) as BattleDebrief;
-}
-
-export function saveBattleDebrief(arenaId: string, accountId: number, debrief: BattleDebrief): void {
-  getDb()
-    .prepare('INSERT OR REPLACE INTO battle_debriefs (arena_id, account_id, json, created_at) VALUES (?, ?, ?, ?)')
-    .run(arenaId, accountId, JSON.stringify(debrief), Date.now());
-}
-
-/** Clear debriefs. Passing accountId clears only that player's debriefs; omit to clear all. */
-export function clearBattleDebriefs(accountId?: number): void {
-  if (accountId !== undefined) {
-    getDb().prepare('DELETE FROM battle_debriefs WHERE account_id = ?').run(accountId);
-  } else {
-    getDb().prepare('DELETE FROM battle_debriefs').run();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tank Baseline — 30-day aggregate for the debrief prompt
-// ---------------------------------------------------------------------------
-
-export interface TankBaseline {
-  battles: number;
-  avgDamage: number;
-  avgFrags: number;
-  avgAssist: number;
-  winRate: number;
-}
-
-export function getTankBaseline(accountId: number, tankKey: string, sinceMs: number): TankBaseline | null {
-  const cutoff = Date.now() - sinceMs;
-  const row = getDb().prepare(`
-    SELECT COUNT(*) as battles,
-           ROUND(AVG(damage), 0) as avgDamage,
-           ROUND(AVG(kills), 2) as avgFrags,
-           ROUND(AVG(assist), 0) as avgAssist,
-           ROUND(AVG(CASE WHEN result='win' THEN 100.0 ELSE 0 END), 1) as winRate
-    FROM battles
-    WHERE account_id = ? AND tank_key = ? AND result != 'incomplete' AND played_at >= ?
-  `).get(accountId, tankKey, cutoff) as Record<string, number> | undefined;
-
-  if (!row || row.battles === 0) return null;
-  return {
-    battles: row.battles,
-    avgDamage: row.avgDamage,
-    avgFrags: row.avgFrags,
-    avgAssist: row.avgAssist,
-    winRate: row.winRate,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Weekly Reports — cache helpers
-// ---------------------------------------------------------------------------
-
-export function getWeeklyReport(accountId: number, isoWeek: string): WeeklyCoachReport | null {
-  const row = getDb()
-    .prepare('SELECT json FROM weekly_reports WHERE account_id = ? AND iso_week = ?')
-    .get(accountId, isoWeek) as { json: string } | undefined;
-  if (!row) return null;
-  return JSON.parse(row.json) as WeeklyCoachReport;
-}
-
-export function saveWeeklyReport(accountId: number, isoWeek: string, report: WeeklyCoachReport): void {
-  getDb()
-    .prepare('INSERT OR REPLACE INTO weekly_reports (account_id, iso_week, json, created_at) VALUES (?, ?, ?, ?)')
-    .run(accountId, isoWeek, JSON.stringify(report), Date.now());
-}
-
-/** Clear weekly reports. Passing accountId clears only that player's reports; omit to clear all. */
-export function clearWeeklyReports(accountId?: number): void {
-  if (accountId !== undefined) {
-    getDb().prepare('DELETE FROM weekly_reports WHERE account_id = ?').run(accountId);
-  } else {
-    getDb().prepare('DELETE FROM weekly_reports').run();
-  }
-}
-
-export function listWeeklyReports(accountId: number, limit = 10): { isoWeek: string; createdAt: number }[] {
-  return getDb()
-    .prepare('SELECT iso_week as isoWeek, created_at as createdAt FROM weekly_reports WHERE account_id = ? ORDER BY iso_week DESC LIMIT ?')
-    .all(accountId, limit) as { isoWeek: string; createdAt: number }[];
+  db.prepare('DELETE FROM tank_stat_snapshots WHERE account_id = ?').run(accountId);
 }

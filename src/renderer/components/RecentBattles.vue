@@ -1,34 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, onActivated } from 'vue';
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue';
 import type { BattleRecord } from '../../shared/types';
 import { getWn8Color } from '../../shared/utils/wn8';
 import { normalizeMapName } from '../../shared/utils/mapNames';
 import { useConfigStore } from '../stores/config';
 import { useScanStore } from '../stores/scan';
+import { useBattlesInvalidation } from '../composables/useBattlesInvalidation';
 import BattleDebriefModal from './BattleDebriefModal.vue';
-import iconLight from '../assets/light.png';
-import iconLightPremium from '../assets/light_premium.png';
-import iconMedium from '../assets/medium.png';
-import iconMediumPremium from '../assets/medium_premium.png';
-import iconHeavy from '../assets/heavy.png';
-import iconHeavyPremium from '../assets/heavy_premium.png';
-import iconTD from '../assets/tank_destroyer.png';
-import iconTDPremium from '../assets/tank_destroyer_premium.png';
-import iconSPG from '../assets/artyllery.png';
-
-const TANK_TYPE_ICONS: Record<string, { normal: string; premium?: string }> = {
-  lightTank:  { normal: iconLight,  premium: iconLightPremium },
-  mediumTank: { normal: iconMedium, premium: iconMediumPremium },
-  heavyTank:  { normal: iconHeavy,  premium: iconHeavyPremium },
-  'AT-SPG':   { normal: iconTD,     premium: iconTDPremium },
-  SPG:        { normal: iconSPG },
-};
+import { tankTypeIcon as typeIcon, masteryLabel, masteryColor } from '../utils/tankDisplay';
 
 function tankTypeIcon(b: BattleRecord): string | null {
-  if (!b.tankType) return null;
-  const icons = TANK_TYPE_ICONS[b.tankType];
-  if (!icons) return null;
-  return (b.tankIsPremium && icons.premium) ? icons.premium : icons.normal;
+  return typeIcon(b.tankType, b.tankIsPremium) || null;
 }
 
 // Fallback local calculation used only when main process hasn't enriched the battle
@@ -45,6 +27,7 @@ const page = ref(0);
 const loading = ref(false);
 const scanning = ref(false);
 const newCount = ref(0);
+const error = ref<string | null>(null);
 
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / PAGE_SIZE)));
 
@@ -58,24 +41,37 @@ function battleWnx(b: BattleRecord): number | undefined {
 
 async function loadPage(p: number) {
   loading.value = true;
+  error.value = null;
   page.value = p;
-  battles.value = await window.api.getBattles(PAGE_SIZE, p * PAGE_SIZE);
-  loading.value = false;
+  try {
+    battles.value = await window.api.getBattles(PAGE_SIZE, p * PAGE_SIZE);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load battles';
+  } finally {
+    loading.value = false;
+  }
 }
 
 const emit = defineEmits<{ scanned: [] }>();
 
-async function scan(quick = false) {
+async function scan() {
   scanning.value = true;
   scanStore.start();
   newCount.value = 0;
+  error.value = null;
   try {
-    const result = await window.api.scanReplays(quick);
+    const result = await window.api.scanReplays();
     newCount.value = result.added;
     if (result.added > 0) {
       totalCount.value = await window.api.getBattlesCount();
       await loadPage(0);
+      // Tell other views their battle data is stale; markSeen so this
+      // component's own invalidation handler doesn't reload a second time.
+      scanStore.invalidateBattles();
+      markSeen();
     }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Replay scan failed';
   } finally {
     scanning.value = false;
     scanStore.stop();
@@ -83,33 +79,51 @@ async function scan(quick = false) {
   }
 }
 
+// Reload the list when battles changed elsewhere (Settings clear, player switch)
+const { markSeen } = useBattlesInvalidation(async () => {
+  totalCount.value = await window.api.getBattlesCount();
+  await loadPage(0);
+});
+
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+function startAutoRefresh() {
+  if (autoRefreshTimer !== null) return;
+  // Check the live config store on each tick so that toggling autoRefresh in
+  // Settings takes effect immediately without a restart.
+  autoRefreshTimer = setInterval(() => {
+    if (!scanning.value && configStore.config?.autoRefresh !== false) scan();
+  }, 30_000);
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer !== null) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+}
 
 onMounted(async () => {
   scanStore.start();
   loading.value = true;
-  [totalCount.value] = await Promise.all([window.api.getBattlesCount()]);
+  try {
+    totalCount.value = await window.api.getBattlesCount();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load battles';
+    loading.value = false;
+    scanStore.stop();
+  }
   await loadPage(0);
   await scan();
-  // Always start the interval; check the live config store on each tick so that
-  // toggling autoRefresh in Settings takes effect immediately without a restart.
-  // <keep-alive> keeps this component alive across navigation, so a one-time mount
-  // check would lock in the setting from the moment the app first opened.
-  autoRefreshTimer = setInterval(() => {
-    if (!scanning.value && configStore.config?.autoRefresh !== false) scan(true);
-  }, 30_000);
+  startAutoRefresh();
 });
 
-onUnmounted(() => {
-  if (autoRefreshTimer !== null) clearInterval(autoRefreshTimer);
-});
+onUnmounted(stopAutoRefresh);
 
-onActivated(async () => {
-  if (!scanStore.dirty) return;
-  scanStore.clearDirty();
-  totalCount.value = await window.api.getBattlesCount();
-  await loadPage(0);
-});
+// <keep-alive> keeps this component alive across navigation — pause the
+// auto-scan interval while the view is inactive so it only runs in front.
+onActivated(startAutoRefresh);
+onDeactivated(stopAutoRefresh);
 
 defineExpose({ scan });
 
@@ -136,12 +150,6 @@ function formatTime(ts: number): string {
     hour: '2-digit', minute: '2-digit',
   });
 }
-
-const MASTERY_LABEL = ['', '3rd', '2nd', '1st', 'Ace'];
-const MASTERY_COLOR = ['', '#9ca3af', '#a78bfa', '#fbbf24', '#f97316'];
-
-function masteryLabel(m: number) { return MASTERY_LABEL[m] ?? ''; }
-function masteryColor(m: number) { return MASTERY_COLOR[m] ?? ''; }
 
 // Debrief modal state
 const debriefBattle = ref<BattleRecord | null>(null);
@@ -178,13 +186,19 @@ function closeDebrief() {
       </button>
     </div>
 
+    <!-- Error state -->
+    <div v-if="error" class="mx-5 my-3 px-4 py-3 bg-red-900/20 border border-red-700/50 rounded-lg flex items-center justify-between gap-3">
+      <p class="text-sm text-red-300">{{ error }}</p>
+      <button @click="loadPage(page)" class="text-xs text-red-400 hover:text-red-300 underline shrink-0">Try again</button>
+    </div>
+
     <!-- Loading state -->
     <div v-if="loading" class="px-5 py-10 text-center">
       <p class="text-sm text-faint animate-pulse">Loading battles...</p>
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="battles.length === 0" class="px-5 py-10 text-center">
+    <div v-else-if="battles.length === 0 && !error" class="px-5 py-10 text-center">
       <p class="text-muted text-sm">No battles found</p>
       <p class="text-faint text-xs mt-1">Make sure the replays directory is set in Settings, then click Scan.</p>
     </div>
@@ -207,7 +221,7 @@ function closeDebrief() {
                 class="text-xs font-bold px-1.5 py-0.5 rounded"
                 :style="{ color: masteryColor(b.markOfMastery), backgroundColor: masteryColor(b.markOfMastery) + '22' }"
               >{{ masteryLabel(b.markOfMastery) }}</span>
-              <span v-if="b.result === 'win'"  class="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-500/15 text-green-400">WIN</span>
+              <span v-if="b.result === 'win'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-500/15 text-green-400">WIN</span>
               <span v-if="b.result === 'loss'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">LOSS</span>
               <span v-if="b.result === 'draw'" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sub text-muted">DRAW</span>
             </div>
@@ -217,8 +231,14 @@ function closeDebrief() {
             </div>
             <div class="flex items-center gap-3 mt-1 text-sm text-muted">
               <span>{{ formatTime(b.playedAt) }}</span>
-              <span v-if="b.result !== 'incomplete'">{{ formatDuration(b.duration) }}</span>
-              <span v-if="b.result === 'incomplete'" class="text-faint italic">abandoned</span>
+              <span v-if="!b.abandoned">{{ formatDuration(b.duration) }}</span>
+              <span
+                v-if="b.abandoned"
+                class="text-faint italic"
+                :title="b.statsEstimated ? 'Bitwa porzucona — statystyki oszacowane z API Wargaming' : 'Bitwa porzucona — brak danych'"
+              >
+                abandoned{{ b.statsEstimated ? ' · estimated' : '' }}
+              </span>
               <span v-if="b.survived" class="text-teal-500">survived</span>
             </div>
           </div>
@@ -288,15 +308,15 @@ function closeDebrief() {
               </p>
             </div>
 
-            <!-- Debrief button — only for completed battles -->
+            <!-- Debrief button — only for battles with a full replay result (not abandoned, even if estimated) -->
             <button
-              v-if="b.result !== 'incomplete'"
+              v-if="!b.abandoned"
               @click="openDebrief(b)"
               class="self-center ml-1 px-2 py-1.5 rounded-lg text-xs font-medium text-gold hover:text-gold-dim bg-gold-bg hover:opacity-80 transition-opacity flex items-center gap-1"
               title="AI battle debrief"
             >
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2zm0 6v4m0 4h.01" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2zm0 6v4m0 4h.01" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <span>Debrief</span>
             </button>

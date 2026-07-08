@@ -1,27 +1,21 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import Dashboard from '../views/Dashboard.vue';
-import TankList from '../views/TankList.vue';
-import TankDetail from '../views/TankDetail.vue';
-import TankCompare from '../views/TankCompare.vue';
-import News from '../views/News.vue';
-import Patches from '../views/Patches.vue';
-import Tutorials from '../views/Tutorials.vue';
-import Settings from '../views/Settings.vue';
-import Analytics from '../views/Analytics.vue';
-import Coach from '../views/Coach.vue';
 
+// Dashboard is eager (first paint); everything else is lazy-loaded so the
+// initial bundle stays small.
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: Dashboard },
-    { path: '/tanks', component: TankList },
-    { path: '/tanks/:id', component: TankDetail, props: true },
-    { path: '/compare', component: TankCompare },
-    { path: '/analytics', component: Analytics },
-    { path: '/coach', component: Coach },
-    { path: '/news', component: News },
-    { path: '/patches', component: Patches },
-    { path: '/tutorials', component: Tutorials },
-    { path: '/settings', component: Settings },
+    { path: '/tanks', component: () => import('../views/TankList.vue') },
+    { path: '/tanks/:id', component: () => import('../views/TankDetail.vue'), props: true },
+    { path: '/compare', component: () => import('../views/TankCompare.vue') },
+    { path: '/analytics', component: () => import('../views/Analytics.vue') },
+    { path: '/coach', component: () => import('../views/Coach.vue') },
+    { path: '/news', component: () => import('../views/News.vue') },
+    { path: '/patches', component: () => import('../views/Patches.vue') },
+    { path: '/tutorials', component: () => import('../views/Tutorials.vue') },
+    { path: '/settings', component: () => import('../views/Settings.vue') },
+    { path: '/:pathMatch(.*)*', component: () => import('../views/NotFound.vue') },
   ],
 });

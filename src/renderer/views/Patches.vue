@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { PatchItem } from '../../shared/types';
+import { useAsyncData } from '../composables/useAsyncData';
+import { formatPubDate as formatDate } from '../utils/format';
 
-const items = ref<PatchItem[]>([]);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const { data: items, loading, error, lastFetched, load } = useAsyncData<PatchItem[]>(
+  () => window.api.getPatches(),
+  [],
+);
 const filter = ref<'all' | 'update' | 'hotfix' | 'micropatch'>('all');
-const lastFetched = ref<number | null>(null);
 
 const displayed = computed(() => {
   if (filter.value === 'all') return items.value;
@@ -19,29 +21,8 @@ const counts = computed(() => ({
   micropatch: items.value.filter(i => i.patchType === 'micropatch').length,
 }));
 
-function formatDate(pubDate: string): string {
-  if (!pubDate) return '';
-  const d = new Date(pubDate);
-  return isNaN(d.getTime())
-    ? pubDate
-    : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 function openLink(url: string) {
   window.api.openExternal(url);
-}
-
-async function load() {
-  loading.value = true;
-  error.value = null;
-  try {
-    items.value = await window.api.getPatches();
-    lastFetched.value = Date.now();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to fetch patches';
-  } finally {
-    loading.value = false;
-  }
 }
 
 onMounted(load);

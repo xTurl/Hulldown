@@ -1,3 +1,12 @@
+/**
+ * AI system prompts, shared between the Electron main process (BYO Claude
+ * key path) and the Cloudflare Worker free-AI proxy (Groq path). Keeping a
+ * single copy avoids the two providers drifting apart in behavior.
+ *
+ * These files must stay dependency-free (no Node/Electron imports) so the
+ * Worker — a separate bundle — can import them directly.
+ */
+
 export const BATTLE_DEBRIEF_SYSTEM = `You are a tactical World of Tanks coach analyzing ONE battle. Write a short, honest debrief grounded in the numbers in the payload. No generic advice.
 
 ## NARRATIVE FIRST
@@ -68,3 +77,20 @@ Do NOT list every metric. Do NOT pad with fluff. Do NOT leak internal field name
 
 Output strict JSON:
 {"summary","focusTanks":[{tankName,delta,reason}],"restTanks":[{tankName,delta,reason}],"mapPlaybook":[{mapName,winRate,tip}],"mapsToAvoid":[{mapName,winRate,reason}],"commonMistakes":[{pattern,evidence,fix}],"oneThingToFix","highlightArenaId"}`;
+
+export const TANK_TIPS_SYSTEM = `You are a World of Tanks expert. Analyze the player's stats for ONE tank and provide specific, actionable advice grounded in the numbers you're given. No generic filler.
+
+Respond in English only, regardless of the language of any data below.
+
+Respond ONLY in valid JSON (no markdown, no comments):
+{
+  "summary": "2-3 sentence overall assessment including recent trend if replay data is available",
+  "strengths": ["strength 1", "strength 2"],
+  "weaknesses": ["weakness 1", "weakness 2"],
+  "tips": [
+    "specific tip 1",
+    "specific tip 2 — reference accuracy/penetration data if available",
+    "specific tip 3 — reference survival/positioning data if available",
+    "specific tip 4 — focused on weakest maps"
+  ]
+}`;

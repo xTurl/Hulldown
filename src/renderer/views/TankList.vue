@@ -1,20 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
 import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
-import iconLight from '../assets/light.png';
-import iconLightPremium from '../assets/light_premium.png';
-import iconMedium from '../assets/medium.png';
-import iconMediumPremium from '../assets/medium_premium.png';
-import iconHeavy from '../assets/heavy.png';
-import iconHeavyPremium from '../assets/heavy_premium.png';
-import iconTD from '../assets/tank_destroyer.png';
-import iconTDPremium from '../assets/tank_destroyer_premium.png';
-import iconSPG from '../assets/artyllery.png';
+import { tankTypeIcon, NATION_FLAGS } from '../utils/tankDisplay';
 
-const playerStore = usePlayerStore();
 const tanksStore = useTanksStore();
 const router = useRouter();
 
@@ -30,24 +20,6 @@ const typeLabels: Record<string, string> = {
   'heavyTank': 'Heavy', 'mediumTank': 'Medium', 'lightTank': 'Light',
   'AT-SPG': 'Tank Destroyer', 'SPG': 'Artillery',
 };
-const TANK_TYPE_ICONS: Record<string, { normal: string; premium?: string }> = {
-  lightTank:  { normal: iconLight,  premium: iconLightPremium },
-  mediumTank: { normal: iconMedium, premium: iconMediumPremium },
-  heavyTank:  { normal: iconHeavy,  premium: iconHeavyPremium },
-  'AT-SPG':   { normal: iconTD,     premium: iconTDPremium },
-  SPG:        { normal: iconSPG },
-};
-const NATION_FLAGS: Record<string, string> = {
-  france: '🇫🇷', germany: '🇩🇪', usa: '🇺🇸', ussr: '🇷🇺', uk: '🇬🇧',
-  japan: '🇯🇵', china: '🇨🇳', czech: '🇨🇿', sweden: '🇸🇪', poland: '🇵🇱',
-  italy: '🇮🇹', netherlands: '🇳🇱', pan_america: '🌎',
-};
-function tankTypeIcon(type: string, isPremium: boolean): string {
-  const icons = TANK_TYPE_ICONS[type];
-  if (!icons) return '';
-  return (isPremium && icons.premium) ? icons.premium : icons.normal;
-}
-
 // Weighted player averages across all tanks
 const playerAvgWr = computed(() => {
   const tanks = tanksStore.tankList.filter(t => t.battles > 0);

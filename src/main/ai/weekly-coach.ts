@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { callClaude } from '../services/claude';
-import { WEEKLY_COACH_SYSTEM } from './prompts';
+import { callAI } from '../services/ai-gateway';
+import { WEEKLY_COACH_SYSTEM } from '../../shared/ai/prompts';
 import type { WeeklyCoachReport } from '../../shared/types';
 import type { WeeklyCoachData } from '../services/analytics';
 
@@ -83,8 +83,9 @@ export async function runWeeklyCoach(
     performance,
   };
 
-  const coachResponse = await callClaude({
+  const coachResponse = await callAI({
     apiKey,
+    feature: 'weekly-coach',
     model: WEEKLY_COACH_MODEL,
     system: WEEKLY_COACH_SYSTEM,
     user: JSON.stringify(userPayload, null, 2),

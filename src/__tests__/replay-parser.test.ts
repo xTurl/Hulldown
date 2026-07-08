@@ -1,17 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { DetectedPlayer } from '../main/services/replay-parser';
 
 // ---------------------------------------------------------------------------
 // fs mock — must be hoisted before importing the module under test
 // ---------------------------------------------------------------------------
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 const mockReaddirSync  = vi.fn<(...args: any[]) => string[]>();
 const mockReaddirAsync = vi.fn<(...args: any[]) => Promise<string[]>>();
 const mockOpenSync     = vi.fn<(...args: any[]) => number>();
 const mockReadSync     = vi.fn<(...args: any[]) => number>();
 const mockCloseSync    = vi.fn<(...args: any[]) => void>();
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 
 
 vi.mock('fs', () => ({
   default: {
@@ -309,8 +308,6 @@ describe('scanReplays — player filtering', () => {
     mockReaddirSync.mockReturnValue(names);
     mockReaddirAsync.mockResolvedValue(names);
 
-    const bufMap = new Map(entries.map(e => [e.name, e.buf]));
-
     mockOpenSync.mockImplementation((_path: string) => {
       // Return a fake fd — we use path to look up buffer below
       return 3;
@@ -353,7 +350,7 @@ describe('scanReplays — player filtering', () => {
     setupDir([{ name: '2026-01-01_battle.wotreplay', buf }]);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, new Set(), b => batches.push(b));
 
     expect(result.added).toBe(1);
     expect(result.skipped).toBe(0);
@@ -367,7 +364,7 @@ describe('scanReplays — player filtering', () => {
     setupDir([{ name: '2026-01-01_other.wotreplay', buf }]);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, new Set(), b => batches.push(b));
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(1);
@@ -380,7 +377,7 @@ describe('scanReplays — player filtering', () => {
     setupDir([{ name: '2026-01-01_old.wotreplay', buf }]);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, new Set(), b => batches.push(b));
 
     // undefined playerAccountId means no filtering — replay should be included
     expect(result.added).toBe(1);
@@ -393,7 +390,7 @@ describe('scanReplays — player filtering', () => {
     setupDir([{ name: '2026-01-01_known.wotreplay', buf }]);
 
     const knownArenaIds = new Set<string>(['known-arena']);
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, () => {});
+    const result = await scanReplays('/replays', MY_ID, knownArenaIds, () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(1);
@@ -402,7 +399,7 @@ describe('scanReplays — player filtering', () => {
   it('should return empty result when replayDir does not exist', async () => {
     mockReaddirAsync.mockRejectedValue(new Error('ENOENT'));
 
-    const result = await scanReplays('/nonexistent', 112233, 'Player', new Set(), () => {});
+    const result = await scanReplays('/nonexistent', 112233, new Set(), () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(0);
@@ -423,7 +420,7 @@ describe('scanReplays — player filtering', () => {
       { name: '2026-01-01_other.wotreplay',  buf: buf3 },
     ]);
 
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
+    const result = await scanReplays('/replays', MY_ID, new Set(), () => {});
 
     expect(result.added).toBe(2);
     expect(result.skipped).toBe(1);
@@ -454,7 +451,7 @@ describe('scanReplays — player filtering', () => {
     );
     mockCloseSync.mockReturnValue(undefined);
 
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
+    const result = await scanReplays('/replays', MY_ID, new Set(), () => {});
 
     expect(openCallCount).toBe(1); // only the real replay was opened
     expect(result.added).toBe(1);

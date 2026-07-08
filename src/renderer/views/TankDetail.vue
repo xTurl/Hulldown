@@ -4,49 +4,9 @@ import { useRouter } from 'vue-router';
 import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import { normalizeMapName } from '../../shared/utils/mapNames';
 import StatCard from '../components/StatCard.vue';
-import type { TankDetails, AppConfig } from '../../shared/types';
-
-import iconLight from '../assets/light.png';
-import iconLightPremium from '../assets/light_premium.png';
-import iconMedium from '../assets/medium.png';
-import iconMediumPremium from '../assets/medium_premium.png';
-import iconHeavy from '../assets/heavy.png';
-import iconHeavyPremium from '../assets/heavy_premium.png';
-import iconTD from '../assets/tank_destroyer.png';
-import iconTDPremium from '../assets/tank_destroyer_premium.png';
-import iconSPG from '../assets/artyllery.png';
-
-const TANK_TYPE_LABELS: Record<string, string> = {
-  lightTank: 'Light Tank',
-  mediumTank: 'Medium Tank',
-  heavyTank: 'Heavy Tank',
-  'AT-SPG': 'Tank Destroyer',
-  SPG: 'SPG',
-};
-
-const TANK_TYPE_ICONS: Record<string, { normal: string; premium?: string }> = {
-  lightTank:  { normal: iconLight,  premium: iconLightPremium },
-  mediumTank: { normal: iconMedium, premium: iconMediumPremium },
-  heavyTank:  { normal: iconHeavy,  premium: iconHeavyPremium },
-  'AT-SPG':   { normal: iconTD,     premium: iconTDPremium },
-  SPG:        { normal: iconSPG },
-};
-
-const NATION_FLAGS: Record<string, string> = {
-  france: '🇫🇷',
-  germany: '🇩🇪',
-  usa: '🇺🇸',
-  ussr: '🇷🇺',
-  uk: '🇬🇧',
-  japan: '🇯🇵',
-  china: '🇨🇳',
-  czech: '🇨🇿',
-  sweden: '🇸🇪',
-  poland: '🇵🇱',
-  italy: '🇮🇹',
-  netherlands: '🇳🇱',
-  pan_america: '🌎',
-};
+import FreeAIUsageBadge from '../components/FreeAIUsageBadge.vue';
+import type { FreeAIFeatureUsage, TankDetails } from '../../shared/types';
+import { TANK_TYPE_LABELS, tankTypeIcon, nationFlag as getNationFlag } from '../utils/tankDisplay';
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -56,7 +16,6 @@ const props = defineProps<{ id: string }>();
 const router = useRouter();
 
 const tank = ref<TankDetails | null>(null);
-const config = ref<AppConfig | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const aiError = ref<string | null>(null);
@@ -67,16 +26,28 @@ const fetchingMaps = ref(false);
 const mapsError = ref<string | null>(null);
 
 const tankId = computed(() => Number(props.id));
-const hasApiKey = computed(() => !!config.value?.claudeApiKey);
+// AI works out of the box via Hulldown's free built-in AI; this only fires
+// when the free tier's fair-use limit is hit or the build has no proxy
+// configured at all — either way, adding an own Claude key is the fix.
+const aiUpsell = computed(() => aiError.value?.includes('Claude API key in Settings') ?? false);
+
+// null while using an own Claude key (unlimited — nothing to show) or before the first fetch resolves.
+const tipsUsage = ref<FreeAIFeatureUsage | null>(null);
+
+async function refreshUsage() {
+  try {
+    const usage = await window.api.getAIUsage();
+    tipsUsage.value = usage?.features['tank-tips'] ?? null;
+  } catch {
+    tipsUsage.value = null;
+  }
+}
 
 async function loadTank() {
   loading.value = true;
   error.value = null;
   try {
-    [tank.value, config.value] = await Promise.all([
-      window.api.getTankDetails(tankId.value),
-      window.api.getConfig(),
-    ]);
+    tank.value = await window.api.getTankDetails(tankId.value);
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load tank data';
   } finally {
@@ -98,6 +69,7 @@ async function generateAI(force = false) {
     }
   } finally {
     generatingAI.value = false;
+    void refreshUsage();
   }
 }
 
@@ -126,19 +98,28 @@ const sortedMaps = computed(() =>
 );
 
 const tankTypeLabel = computed(() => tank.value ? (TANK_TYPE_LABELS[tank.value.type] ?? capitalize(tank.value.type)) : '');
-const tankTypeImg = computed(() => {
-  if (!tank.value) return '';
-  const icons = TANK_TYPE_ICONS[tank.value.type];
-  if (!icons) return '';
-  return (tank.value.isPremium && icons.premium) ? icons.premium : icons.normal;
-});
-const nationFlag = computed(() => tank.value ? (NATION_FLAGS[tank.value.nation] ?? '') : '');
+const tankTypeImg = computed(() => tank.value ? tankTypeIcon(tank.value.type, tank.value.isPremium) : '');
+const nationFlag = computed(() => tank.value ? getNationFlag(tank.value.nation) : '');
 const nationLabel = computed(() => tank.value ? capitalize(tank.value.nation) : '');
 
 watch(activeTab, (tab) => {
   if (tab === 'maps' && replayMaps.value.length === 0 && !fetchingMaps.value) {
     fetchMaps();
   }
+  if (tab === 'ai') {
+    void refreshUsage();
+  }
+});
+
+// Reload when navigating between tank pages (/tanks/1 → /tanks/2) — with
+// <keep-alive> the component instance is reused, so onMounted won't re-fire.
+watch(() => props.id, () => {
+  tank.value = null;
+  replayMaps.value = [];
+  mapsError.value = null;
+  aiError.value = null;
+  activeTab.value = 'stats';
+  loadTank();
 });
 
 onMounted(loadTank);
@@ -302,13 +283,22 @@ onMounted(loadTank);
       </div>
 
       <!-- AI tab -->
-      <div v-else-if="activeTab === 'ai'">
+      <div v-else-if="activeTab === 'ai'" class="space-y-4">
+        <FreeAIUsageBadge
+          v-if="tipsUsage"
+          :remaining="tipsUsage.remaining"
+          :limit="tipsUsage.limit"
+          label="tips"
+          :global-available="tipsUsage.globalAvailable"
+          variant="prominent"
+        />
         <div v-if="!tank.recommendations">
           <div class="bg-card border border-line rounded-xl p-8 text-center">
             <p class="text-muted mb-2">AI tips haven't been generated yet</p>
-            <p class="text-sm text-faint mb-4">Click below to generate personalized tips for this tank (1 Claude API request).</p>
-            <div v-if="!hasApiKey" class="mb-4 px-4 py-2.5 bg-sub border border-line rounded-lg text-sm text-muted inline-block">
-              Set your Claude API key in <strong class="text-fg">Settings</strong> to use AI tips.
+            <p class="text-sm text-faint mb-4">Click below to generate personalized tips for this tank.</p>
+            <div v-if="aiUpsell" class="mb-4 px-4 py-2.5 bg-sub border border-line rounded-lg text-sm text-muted inline-block max-w-md">
+              {{ aiError }}
+              <router-link to="/settings" class="text-gold hover:text-gold-dim font-medium">Go to Settings</router-link>
             </div>
             <div v-else-if="aiError" class="mb-4 px-4 py-2.5 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-300 inline-block">
               {{ aiError }}
@@ -316,7 +306,7 @@ onMounted(loadTank);
             <div>
               <button
                 @click="generateAI"
-                :disabled="generatingAI || !hasApiKey"
+                :disabled="generatingAI"
                 class="px-5 py-2.5 bg-gold-bg text-gold border border-gold/30 hover:opacity-80 disabled:opacity-50 text-sm rounded-lg transition-opacity"
               >
                 {{ generatingAI ? 'Generating tips...' : '✨ Generate AI tips' }}
@@ -359,10 +349,14 @@ onMounted(loadTank);
               </li>
             </ol>
           </div>
-          <div v-if="aiError" class="px-4 py-2.5 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-300">
+          <div v-if="aiUpsell" class="px-4 py-2.5 bg-sub border border-line rounded-lg text-sm text-muted">
+            {{ aiError }}
+            <router-link to="/settings" class="text-gold hover:text-gold-dim font-medium">Go to Settings</router-link>
+          </div>
+          <div v-else-if="aiError" class="px-4 py-2.5 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-300">
             {{ aiError }}
           </div>
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
             <p class="text-xs text-faint">
               Generated: {{ new Date(tank.recommendations.generatedAt).toLocaleString('en-US') }}
             </p>

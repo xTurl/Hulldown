@@ -13,6 +13,32 @@ export interface AppConfig {
   autoRefresh: boolean;
 }
 
+/**
+ * Config shape exposed to the renderer. The raw Claude API key never leaves
+ * the main process — the renderer only learns whether a key is stored.
+ */
+export interface RendererConfig {
+  accountId: number;
+  username: string;
+  region: string;
+  replaysDir: string;
+  autoRefresh: boolean;
+  hasClaudeApiKey: boolean;
+}
+
+/**
+ * Payload accepted by config:save. `claudeApiKey` is write-only:
+ * a non-empty string replaces the stored key, anything else keeps it.
+ */
+export interface RendererConfigUpdate {
+  accountId: number;
+  username: string;
+  region: string;
+  replaysDir: string;
+  autoRefresh: boolean;
+  claudeApiKey?: string;
+}
+
 export interface BattleRecord {
   id: number;
   accountId: number;
@@ -48,6 +74,14 @@ export interface BattleRecord {
   marksOnGun: number;
   lifeTime: number;
   achievements: number[];
+  /** True when the player left before the battle ended locally (no block1 in the replay). */
+  abandoned: boolean;
+  /**
+   * True when damage/frags/spotted/xp/etc. were reconstructed by diffing WG API
+   * cumulative tank stats across two snapshots, rather than read directly from
+   * a replay file. Only ever set on `abandoned` battles.
+   */
+  statsEstimated: boolean;
 }
 
 export interface PlayerStats {
@@ -142,6 +176,22 @@ export interface PatchItem {
   patchType: 'update' | 'hotfix' | 'micropatch';
 }
 
+export type FreeAIFeature = 'debrief' | 'weekly-coach' | 'tank-tips';
+
+export interface FreeAIFeatureUsage {
+  used: number;
+  limit: number;
+  remaining: number;
+  /** False when the shared free-tier budget for this feature is exhausted for everyone today, regardless of this device's own remaining count. */
+  globalAvailable: boolean;
+}
+
+/** Free-tier usage snapshot for the built-in AI proxy. `null` when the user has their own Claude API key (unlimited, no counter to show). */
+export interface FreeAIUsageInfo {
+  day: string;
+  features: Record<FreeAIFeature, FreeAIFeatureUsage>;
+}
+
 export interface BattleDebrief {
   summary: string;
   wentWell: string[];
@@ -166,6 +216,49 @@ export interface ProgressSnapshot {
   rawXp: number;
   rawSpotted: number;
   rawDroppedCp: number;
+}
+
+// ---------------------------------------------------------------------------
+// Replay analytics — aggregates computed in the main process and consumed by
+// the renderer via IPC.
+// ---------------------------------------------------------------------------
+
+export interface ReplayMapStat {
+  mapName: string; battles: number; wins: number; winRate: number;
+  avgDamage: number; avgKills: number; avgAssist: number; avgSpotted: number;
+}
+
+export interface ReplayTankStat {
+  tankName: string; tankKey: string; battles: number; wins: number; winRate: number;
+  avgDamage: number; avgKills: number; avgAssist: number; avgBlocked: number;
+  netCredits: number; bestMastery: number;
+}
+
+export interface EconomyDay {
+  day: string; battles: number; wins: number;
+  netCredits: number; grossCredits: number; totalRepairs: number;
+}
+
+export interface SessionSummary {
+  sessionNum: number; startedAt: number; endedAt: number;
+  battles: number; wins: number; winRate: number;
+  avgDamage: number; avgKills: number; netCredits: number;
+  totalDamage: number; totalFrags: number; totalSpotted: number;
+  totalDropped: number; totalAssist: number;
+}
+
+export interface TodaySession {
+  battles: number; wins: number; losses: number; winRate: number;
+  avgDamage: number; avgAssist: number; avgFrags: number; avgSpots: number;
+  survivalRate: number; tankCount: number;
+  totalDamage: number; totalWins: number; totalFrags: number;
+  totalSpotted: number; totalDropped: number; totalNetCredits: number;
+}
+
+export interface DetectedPlayer {
+  playerName: string;
+  accountId: number | null;
+  region: string;
 }
 
 // ---------------------------------------------------------------------------

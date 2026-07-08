@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../../main/services/cache';
-import { getWn8Color, calculateWn8, calculateWnx } from '../../shared/utils/wn8';
+import { useBattlesInvalidation } from '../composables/useBattlesInvalidation';
+import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary } from '../../shared/types';
+import { getWn8Color, getWrColor, calculateWn8, calculateWnx } from '../../shared/utils/wn8';
+import { MASTERY_LABELS, MASTERY_COLORS } from '../utils/tankDisplay';
 import { normalizeMapName } from '../../shared/utils/mapNames';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -13,6 +15,21 @@ use([CanvasRenderer, BarChart, LineChart, GridComponent, TooltipComponent, Legen
 
 type Tab = 'economy' | 'maps' | 'tanks' | 'sessions';
 const activeTab = ref<Tab>('economy');
+
+// Shared error state for all tab loaders — set by whichever loader failed last.
+const loadError = ref<string | null>(null);
+
+async function withLoad(loadingRef: { value: boolean }, fn: () => Promise<void>) {
+  loadingRef.value = true;
+  loadError.value = null;
+  try {
+    await fn();
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to load data';
+  } finally {
+    loadingRef.value = false;
+  }
+}
 
 // ── Economy ───────────────────────────────────────────────────────────────────
 const economyDays = ref(30);
@@ -127,9 +144,9 @@ const economyChartOption = computed(() => {
 });
 
 async function loadEconomy() {
-  economyLoading.value = true;
-  economyData.value = await window.api.getEconomy(economyDays.value);
-  economyLoading.value = false;
+  await withLoad(economyLoading, async () => {
+    economyData.value = await window.api.getEconomy(economyDays.value);
+  });
 }
 
 watch(economyDays, loadEconomy);
@@ -160,12 +177,12 @@ function startOfTodayMs(): number {
 }
 
 async function loadMaps() {
-  mapLoading.value = true;
-  const sinceMs = mapPeriod.value === -1
-    ? Date.now() - startOfTodayMs()
-    : mapPeriod.value;
-  mapData.value = await window.api.getMapStats(sinceMs);
-  mapLoading.value = false;
+  await withLoad(mapLoading, async () => {
+    const sinceMs = mapPeriod.value === -1
+      ? Date.now() - startOfTodayMs()
+      : mapPeriod.value;
+    mapData.value = await window.api.getMapStats(sinceMs);
+  });
 }
 
 watch(mapPeriod, loadMaps);
@@ -188,9 +205,9 @@ const sortedTanks = computed(() =>
 );
 
 async function loadTanks() {
-  tankLoading.value = true;
-  tankData.value = await window.api.getTankRecentStats(tankPeriod.value);
-  tankLoading.value = false;
+  await withLoad(tankLoading, async () => {
+    tankData.value = await window.api.getTankRecentStats(tankPeriod.value);
+  });
 }
 
 watch(tankPeriod, loadTanks);
@@ -200,9 +217,9 @@ const sessionData = ref<SessionSummary[]>([]);
 const sessionLoading = ref(false);
 
 async function loadSessions() {
-  sessionLoading.value = true;
-  sessionData.value = await window.api.getSessions(30);
-  sessionLoading.value = false;
+  await withLoad(sessionLoading, async () => {
+    sessionData.value = await window.api.getSessions(30);
+  });
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -214,19 +231,28 @@ async function switchTab(tab: Tab) {
   if (tab === 'sessions'&& !sessionData.value.length) await loadSessions();
 }
 
+function retryActiveTab() {
+  if (activeTab.value === 'economy')  return loadEconomy();
+  if (activeTab.value === 'maps')     return loadMaps();
+  if (activeTab.value === 'tanks')    return loadTanks();
+  return loadSessions();
+}
+
+// When the battle database changes (new scan results, cleared battles, player
+// switch), drop all cached tab data and reload whichever tab is visible.
+useBattlesInvalidation(() => {
+  economyData.value = [];
+  mapData.value = [];
+  tankData.value = [];
+  sessionData.value = [];
+  retryActiveTab();
+});
+
 onMounted(() => loadEconomy());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const MASTERY = ['', '3rd', '2nd', '1st', 'Ace'];
-const MASTERY_COLOR = ['', '#9ca3af', '#a78bfa', '#fbbf24', '#f97316'];
-
-function wrColor(wr: number) {
-  if (wr < 46) return '#f87171';
-  if (wr < 50) return '#d97706';
-  if (wr < 54) return '#a3e635';
-  if (wr < 60) return '#34d399';
-  return '#818cf8';
-}
+// Single source of WR colors so all views paint the same win rate the same way
+const wrColor = getWrColor;
 
 function creditsColor(n: number) { return n >= 0 ? '#34d399' : '#f87171'; }
 
@@ -272,7 +298,7 @@ function sessionWnx(s: SessionSummary): number {
         <h2 class="text-2xl font-bold text-fg">Analytics</h2>
         <div class="group relative flex items-center">
           <svg class="w-4 h-4 text-faint hover:text-muted cursor-default transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
           </svg>
           <div class="absolute left-6 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 bg-card border border-line rounded-lg px-3 py-2.5 shadow-xl">
             <p class="text-xs text-fg font-medium mb-1">Completed battles only</p>
@@ -285,9 +311,9 @@ function sessionWnx(s: SessionSummary): number {
       <div class="flex gap-1 mb-6 bg-sub border border-line rounded-xl p-1">
         <button
           v-for="{ id, label } in [
-            { id: 'economy',  label: 'Economy'  },
-            { id: 'maps',     label: 'Maps'     },
-            { id: 'tanks',    label: 'Tanks'    },
+            { id: 'economy', label: 'Economy' },
+            { id: 'maps', label: 'Maps' },
+            { id: 'tanks', label: 'Tanks' },
             { id: 'sessions', label: 'Sessions' },
           ]"
           :key="id"
@@ -299,6 +325,15 @@ function sessionWnx(s: SessionSummary): number {
               : 'text-muted hover:text-fg hover:bg-sub',
           ]"
         >{{ label }}</button>
+      </div>
+
+      <!-- Load error banner -->
+      <div v-if="loadError" class="flex items-center justify-between gap-3 px-4 py-3 mb-4 bg-red-900/20 border border-red-700/50 rounded-lg">
+        <p class="text-sm text-red-300">{{ loadError }}</p>
+        <button
+          @click="retryActiveTab"
+          class="text-xs text-red-400 hover:text-red-300 underline shrink-0"
+        >Try again</button>
       </div>
 
       <!-- ── ECONOMY ── -->
@@ -460,8 +495,8 @@ function sessionWnx(s: SessionSummary): number {
               <span class="text-sm font-medium text-right" :style="{ color: creditsColor(t.netCredits) }">
                 {{ formatCredits(t.netCredits) }}
               </span>
-              <span class="text-xs font-bold text-right" :style="{ color: MASTERY_COLOR[t.bestMastery] }">
-                {{ MASTERY[t.bestMastery] || '—' }}
+              <span class="text-xs font-bold text-right" :style="{ color: MASTERY_COLORS[t.bestMastery] }">
+                {{ MASTERY_LABELS[t.bestMastery] || '—' }}
               </span>
             </div>
           </div>

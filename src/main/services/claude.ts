@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ZodSchema } from 'zod';
+import { parseAIJson } from './ai-json';
 
 /**
  * Strips control characters (including newlines) and limits length of strings
@@ -48,25 +49,7 @@ export async function callClaude<T>(opts: {
   const content = message.content[0];
   if (content.type !== 'text') throw new Error('Unexpected response type from Claude');
 
-  // Strip optional markdown code fences that some Claude responses include
-  const rawText = content.text
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch (e) {
-    throw new Error(`Claude returned invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
-  }
-
-  const result = opts.schema.safeParse(parsed);
-  if (!result.success) {
-    throw new Error(`Claude response failed schema validation: ${result.error.message}`);
-  }
-
-  return result.data;
+  return parseAIJson(content.text, opts.schema, 'Claude');
 }
 
 /**

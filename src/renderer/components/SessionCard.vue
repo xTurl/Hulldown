@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { ProgressSnapshot } from '../../shared/types';
-import type { TodaySession } from '../../main/services/cache';
+import type { ProgressSnapshot, TodaySession } from '../../shared/types';
 import { calculateWn8, calculateWnx, getWn8Color, getWrColor } from '../../shared/utils/wn8';
 import { useConfigStore } from '../stores/config';
 

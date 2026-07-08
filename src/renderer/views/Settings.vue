@@ -5,7 +5,7 @@ import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
 import { useThemeStore, type ThemeMode } from '../stores/theme';
 import { useScanStore } from '../stores/scan';
-import type { AppConfig, CacheStats } from '../../shared/types';
+import type { RendererConfig, CacheStats } from '../../shared/types';
 
 const configStore = useConfigStore();
 const playerStore = usePlayerStore();
@@ -13,9 +13,13 @@ const tanksStore = useTanksStore();
 const themeStore = useThemeStore();
 const scanStore = useScanStore();
 
-const form = ref<AppConfig>({
-  claudeApiKey: '', accountId: 0, username: '', region: 'EU', replaysDir: '', autoRefresh: true,
+const form = ref<Omit<RendererConfig, 'hasClaudeApiKey'>>({
+  accountId: 0, username: '', region: 'EU', replaysDir: '', autoRefresh: true,
 });
+// Write-only key handling: the raw key never comes back from the main process.
+// The input stays empty; a non-empty value on save replaces the stored key.
+const apiKeyInput = ref('');
+const hasApiKey = ref(false);
 const saved = ref(false);
 const saving = ref(false);
 const saveError = ref<string | null>(null);
@@ -63,9 +67,15 @@ async function save() {
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Save timed out')), 5000)
     );
-    await Promise.race([window.api.saveConfig({ ...form.value }), timeout]);
+    const newKey = apiKeyInput.value.trim();
+    await Promise.race([
+      window.api.saveConfig({ ...form.value, ...(newKey ? { claudeApiKey: newKey } : {}) }),
+      timeout,
+    ]);
     await window.api.clearCache();
-    configStore.config = form.value;
+    await configStore.loadConfig();
+    hasApiKey.value = configStore.config?.hasClaudeApiKey ?? false;
+    if (newKey) apiKeyInput.value = '';
     playerStore.reset();
     tanksStore.reset();
     await playerStore.fetchPlayerInfo();
@@ -94,7 +104,7 @@ async function clearAndRescanBattles() {
     await window.api.clearBattles();
     await window.api.scanReplays();
     battlesCleared.value = true;
-    scanStore.markDirty();
+    scanStore.invalidateBattles();
     setTimeout(() => battlesCleared.value = false, 4000);
   } finally {
     clearingBattles.value = false;
@@ -103,11 +113,12 @@ async function clearAndRescanBattles() {
 }
 
 onMounted(async () => {
-  if (configStore.config) {
-    form.value = { ...configStore.config };
-  } else {
-    const cfg = await window.api.getConfig();
-    form.value = { ...cfg };
+  if (!configStore.config) await configStore.loadConfig();
+  const cfg = configStore.config;
+  if (cfg) {
+    const { hasClaudeApiKey, ...fields } = cfg;
+    form.value = { ...fields };
+    hasApiKey.value = hasClaudeApiKey;
   }
   cacheStats.value = await window.api.getCacheStats();
   appVersion.value = await window.api.getAppVersion();
@@ -187,14 +198,19 @@ onMounted(async () => {
       <p v-if="redetectSuccess" class="text-xs text-green-400 mt-3">✓ Player re-detected. Save settings to apply.</p>
     </div>
 
-    <!-- API Keys -->
+    <!-- AI -->
     <div class="bg-card border border-line rounded-xl p-5 mb-4" style="box-shadow: 0 4px 20px rgba(0,0,0,0.2)">
-      <h3 class="text-sm font-semibold text-fg mb-4">API Keys</h3>
+      <h3 class="text-sm font-semibold text-fg mb-1">AI (Coach, Debrief, Tank tips)</h3>
+      <p class="text-xs text-faint mb-4">
+        AI features work out of the box using Hulldown's free built-in AI (rate-limited, shared across all users).
+        Add your own Claude API key below for unlimited use and higher-quality analysis.
+      </p>
       <div>
-        <label class="block text-xs text-muted mb-1.5">Claude API Key</label>
+        <label class="block text-xs text-muted mb-1.5">Claude API Key (optional)</label>
         <input
-          v-model="form.claudeApiKey"
+          v-model="apiKeyInput"
           type="password"
+          :placeholder="hasApiKey ? '••••••••  (key saved — enter a new one to replace it)' : 'sk-ant-... (leave empty to use free AI)'"
           class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none transition-colors"
           style="background: var(--sub); border-color: var(--line); color: var(--fg);"
           onfocus="this.style.borderColor='var(--gold)'"

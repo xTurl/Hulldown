@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { callClaude, sanitizeForPrompt } from '../services/claude';
+import { sanitizeForPrompt } from '../services/claude';
+import { callAI } from '../services/ai-gateway';
+import { TANK_TIPS_SYSTEM } from '../../shared/ai/prompts';
 import type { Tank, MapStat, AIRecommendations } from '../../shared/types';
 import type { ReplayTankContext } from '../services/cache';
 
@@ -70,8 +72,7 @@ RECENT DATA (last ~30 days, ${replayContext.battles} battles from replays):
 Note: compare recent WR/damage to overall stats above to detect improvement or regression trends.
 ` : '';
 
-  const prompt = `You are a World of Tanks expert. Analyze the player's stats and provide specific, actionable advice.
-${contextSection}
+  const user = `${contextSection}
 TANK: ${sanitizeForPrompt(tank.name, 80)} (Tier ${tank.tier}, ${sanitizeForPrompt(tank.type, 40)}, ${sanitizeForPrompt(tank.nation, 40)})
 OVERALL LIFETIME STATS:
 - Battles: ${tank.battles} | WR%: ${tank.winRate.toFixed(1)}% | WN8: ${tank.wn8} | WNX: ${tank.wnx}
@@ -79,26 +80,14 @@ OVERALL LIFETIME STATS:
 - Avg frags: ${tank.avgFrags.toFixed(2)} | Avg spots: ${tank.avgSpots.toFixed(2)} | Survival: ${tank.survivalRate.toFixed(1)}% | Avg XP: ${tank.avgXp}
 ${replaySection}
 MAP STATS — ${mapSource} (top 10):
-${mapSummary}
+${mapSummary}`;
 
-All text values in the JSON must be in English. Respond ONLY in valid JSON (no markdown, no comments):
-{
-  "summary": "2-3 sentence overall assessment including recent trend if replay data is available",
-  "strengths": ["strength 1", "strength 2"],
-  "weaknesses": ["weakness 1", "weakness 2"],
-  "tips": [
-    "specific tip 1",
-    "specific tip 2 — reference accuracy/penetration data if available",
-    "specific tip 3 — reference survival/positioning data if available",
-    "specific tip 4 — focused on weakest maps"
-  ]
-}`;
-
-  const result = await callClaude({
+  const result = await callAI({
     apiKey,
+    feature: 'tank-tips',
     model: TANK_RECOMMENDATIONS_MODEL,
-    system: 'You are a World of Tanks expert assistant. Always respond in English only, regardless of the language of any data you receive.',
-    user: prompt,
+    system: TANK_TIPS_SYSTEM,
+    user,
     maxTokens: TANK_RECOMMENDATIONS_MAX_TOKENS,
     schema: AIRecommendationsSchema,
   });

@@ -80,6 +80,7 @@ vi.mock('../main/services/cache', () => ({
   getKnownArenaIds: vi.fn(() => new Set()),
   insertBattles: vi.fn(),
   clearAll: vi.fn(),
+  clearApiCaches: vi.fn(),
   clearBattles: vi.fn(),
   clearPlayerInfoCache: vi.fn(),
   clearWgDataCache: vi.fn(),
@@ -110,6 +111,13 @@ vi.mock('../main/services/claude', async () => {
   };
 });
 
+// Free AI proxy mock — exercised when claudeApiKey is empty (ai-gateway falls back to it).
+vi.mock('../main/services/free-ai', () => ({
+  callFreeAI: vi.fn(),
+  getFreeAIUsage: vi.fn(),
+  FreeAILimitError: class FreeAILimitError extends Error {},
+}));
+
 vi.mock('../main/ai/tank-recommendations', () => ({
   generateTankRecommendations: vi.fn(),
 }));
@@ -121,6 +129,7 @@ vi.mock('../main/ai/tank-recommendations', () => ({
 import * as cacheService from '../main/services/cache';
 import * as configService from '../main/services/config';
 import * as claudeService from '../main/services/claude';
+import * as freeAiService from '../main/services/free-ai';
 import { registerHandlers } from '../main/ipc/handlers';
 import type { BattleRecord, BattleDebrief } from '../shared/types';
 
@@ -139,6 +148,7 @@ const mockBattle: BattleRecord = {
   survived: true, duration: 600, droppedCapture: 0, damageReceived: 600,
   damageBlocked: 500, repairCost: 1500, netCredits: 33500,
   markOfMastery: 3, marksOnGun: 1, lifeTime: 590, achievements: [],
+  abandoned: false, statsEstimated: false,
 };
 
 const mockDebrief: BattleDebrief = {
@@ -216,7 +226,7 @@ describe('battle:debrief handler', () => {
     await expect(invoke('battle:debrief', 'arena-test')).rejects.toThrow('incomplete');
   });
 
-  it('throws "AI not configured" when claudeApiKey is empty', async () => {
+  it('falls back to the free AI proxy when claudeApiKey is empty', async () => {
     vi.mocked(configService.getConfig).mockReturnValue({
       claudeApiKey: '',
       accountId: 1000,
@@ -225,7 +235,30 @@ describe('battle:debrief handler', () => {
       replaysDir: '/replays',
       autoRefresh: true,
     });
-    await expect(invoke('battle:debrief', 'arena-test')).rejects.toThrow('AI not configured');
+    vi.mocked(freeAiService.callFreeAI).mockResolvedValue({
+      summary: 'Good game.', wentWell: ['High damage'], wentWrong: ['Died early'], tips: ['Use hull-down'],
+    });
+
+    const result = await invoke('battle:debrief', 'arena-test') as BattleDebrief;
+    expect(freeAiService.callFreeAI).toHaveBeenCalledOnce();
+    expect(claudeService.callClaude).not.toHaveBeenCalled();
+    expect(result.summary).toBe('Good game.');
+  });
+
+  it('propagates a friendly error when the free AI proxy is unavailable and no key is set', async () => {
+    vi.mocked(configService.getConfig).mockReturnValue({
+      claudeApiKey: '',
+      accountId: 1000,
+      username: 'TestPlayer',
+      region: 'EU',
+      replaysDir: '/replays',
+      autoRefresh: true,
+    });
+    vi.mocked(freeAiService.callFreeAI).mockRejectedValue(
+      new Error('AI is not available in this build. Add your own Claude API key in Settings to enable AI features.'),
+    );
+
+    await expect(invoke('battle:debrief', 'arena-test')).rejects.toThrow('Add your own Claude API key in Settings');
   });
 
   it('throws when arenaId is not a string (validator)', async () => {

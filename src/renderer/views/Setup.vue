@@ -58,7 +58,8 @@ async function finish() {
       username: detectedName.value,
       accountId: detectedId.value,
       region: detectedRegion.value,
-      claudeApiKey: claudeApiKey.value.trim() || config.claudeApiKey,
+      // Write-only contract: omitting the key keeps whatever is already stored
+      ...(claudeApiKey.value.trim() ? { claudeApiKey: claudeApiKey.value.trim() } : {}),
     });
     // Kick off initial scan in background — no need to await
     window.api.scanReplays();
@@ -151,12 +152,12 @@ async function finish() {
       <!-- Step 3: API keys -->
       <div v-else-if="step === 'keys'" class="space-y-4">
         <p class="text-sm text-muted text-center mb-2">
-          Optionally add your Claude API key for AI-powered tips per tank.<br>
-          <span class="text-faint">You can skip this and add it later in Settings.</span>
+          AI features (Coach, Debrief, Tank tips) work out of the box with Hulldown's free built-in AI.<br>
+          <span class="text-faint">Add your own Claude API key below for unlimited use and higher-quality analysis — or skip and add it later in Settings.</span>
         </p>
 
         <div class="bg-sub border border-line rounded-lg px-4 py-3 text-xs text-muted space-y-1">
-          <p class="font-semibold text-fg mb-2">How to get your free API key:</p>
+          <p class="font-semibold text-fg mb-2">How to get your own free API key:</p>
           <p>1. Click the link below to open Anthropic Console</p>
           <p>2. Sign up or log in (free account)</p>
           <p>3. Go to <span class="text-fg font-mono">API Keys</span> and click <span class="text-fg font-mono">+ Create key</span></p>
@@ -172,7 +173,7 @@ async function finish() {
         <div>
           <label class="block text-xs text-muted mb-1">
             Claude API Key
-            <span class="text-faint ml-1">— AI tips per tank</span>
+            <span class="text-faint ml-1">— optional, unlimited AI tips per tank</span>
           </label>
           <input v-model="claudeApiKey" type="password"
             placeholder="sk-ant-..."

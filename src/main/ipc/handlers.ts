@@ -1,67 +1,27 @@
 import { app, ipcMain, shell, dialog } from 'electron';
-import path from 'path';
 import * as configService from '../services/config';
 import * as cacheService from '../services/cache';
 import * as analyticsService from '../services/analytics';
 import * as wgService from '../services/wargaming';
+import * as wgData from '../services/wg-data';
 import * as newsService from '../services/news';
 import * as patchesService from '../services/patches';
 import * as replayParser from '../services/replay-parser';
+import * as replayScan from '../services/replay-scan';
 import * as updaterService from '../services/updater';
 import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
-import { assertString, assertNumber, assertOptionalNumber, assertBoolean, assertConfig } from './validators';
-import type { Tank, TankDetails, BattleRecord, BattleDebrief, WeeklyCoachReport } from '../../shared/types';
+import { assertString, assertNumber, assertOptionalNumber, assertConfig } from './validators';
+import type { TankDetails, BattleDebrief, WeeklyCoachReport, FreeAIUsageInfo } from '../../shared/types';
 import { withAICache } from '../services/claude';
-import { generateTankRecommendations, type PlayerContext } from '../ai/tank-recommendations';
+import { getFreeAIUsage } from '../services/free-ai';
+import { generateTankRecommendations } from '../ai/tank-recommendations';
 import { runBattleDebrief } from '../ai/battle-debrief';
 import { runWeeklyCoach } from '../ai/weekly-coach';
 import { getIsoWeek } from '../../shared/utils/dates';
-import { MINUTE, HOUR, DAY, WEEK } from '../../shared/utils/time';
+import { HOUR, DAY, WEEK } from '../../shared/utils/time';
 
 const ONE_HOUR = HOUR;
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
-
-// In-memory cache for expensive WG API responses — cleared on app restart or manual cache clear
-let memTankStats: wgService.WgTankStat[] | null = null;
-let memEncyclopedia: Record<number, wgService.WgVehicle> | null = null;
-let memFetchedAt = 0;
-// In-flight deduplication: concurrent callers share one fetch instead of hammering the WG API
-let pendingWgData: Promise<{ tankStats: wgService.WgTankStat[]; encyclopedia: Record<number, wgService.WgVehicle> }> | null = null;
-
-// WN8 expected values cache (XVM) — 24 h TTL, best-effort (null = unavailable)
-let memWn8Exp: Map<number, wgService.Wn8ExpEntry> | null = null;
-let memWn8ExpFetchedAt = 0;
-const WN8_EXP_TTL = DAY;
-
-// name → tankId reverse lookup built from encyclopedia
-let memNameToTankId: Map<string, number> | null = null;
-// vehicle tag → tankId lookup (more reliable than name matching for replay enrichment)
-let memTagToTankId: Map<string, number> | null = null;
-
-// Timestamp of the last successful replay scan — used to limit incremental scans
-let lastScanTime = 0;
-
-/**
- * Extracts the WG vehicle tag from a replay playerVehicle key.
- * "uk-GB123_GSOR_1006_v7"  → "GB123_GSOR_1006_v7"
- * "sweden:S10_Strv_107_12" → "S10_Strv_107_12"
- */
-function extractVehicleTag(tankKey: string): string {
-  // Strip nation prefix, then strip trailing _v<N> version suffix that WG adds
-  // to vehicle keys in replay files when updating tank models. The WG encyclopedia
-  // API tag field does not include this suffix, so the lookup would silently fail
-  // for any versioned tank, falling back to the rough WN8 approximation.
-  return tankKey.replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '').replace(/_v\d+$/, '');
-}
-
-function clearMemCache() {
-  memTankStats = null;
-  memEncyclopedia = null;
-  memFetchedAt = 0;
-  memNameToTankId = null;
-  memTagToTankId = null;
-  pendingWgData = null;
-}
 
 /** Wraps an IPC handler so all errors are caught and logged before re-throwing. */
 function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
@@ -74,171 +34,6 @@ function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
       throw e;
     }
   });
-}
-
-const WG_API_KEY = process.env.WG_API_KEY || '';
-
-async function getWgData(config: ReturnType<typeof configService.getConfig>) {
-  if (memTankStats && memEncyclopedia && Date.now() - memFetchedAt < ONE_HOUR) {
-    return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
-  }
-
-  // Check SQLite cache before hitting the network — survives app restarts.
-  // This eliminates the 2-5s WG API wait on every launch after the first.
-  if (!memTankStats || !memEncyclopedia) {
-    const sqliteCache = cacheService.getWgDataCache(config.accountId);
-    if (sqliteCache && Date.now() - sqliteCache.updatedAt < ONE_HOUR) {
-      memTankStats    = sqliteCache.tankStats as wgService.WgTankStat[];
-      memEncyclopedia = sqliteCache.encyclopedia as Record<number, wgService.WgVehicle>;
-      memFetchedAt    = sqliteCache.updatedAt;
-      memNameToTankId = new Map(Object.values(memEncyclopedia).map(v => [v.name, v.tank_id]));
-      memTagToTankId  = new Map(Object.values(memEncyclopedia).map(v => [v.tag,  v.tank_id]));
-      return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
-    }
-  }
-
-  // Return the in-flight promise if a fetch is already running — prevents duplicate WG API
-  // requests when multiple IPC handlers call getWgData concurrently on a cold cache.
-  if (pendingWgData) return pendingWgData;
-
-  pendingWgData = (async () => {
-    try {
-      const [tankStats, encyclopedia] = await Promise.all([
-        wgService.getPlayerTankStats(config.accountId, WG_API_KEY, config.region),
-        wgService.getVehicleEncyclopedia(WG_API_KEY, config.region),
-      ]);
-      memTankStats = tankStats;
-      memEncyclopedia = encyclopedia;
-      memFetchedAt = Date.now();
-      // Build reverse lookups for battle enrichment
-      memNameToTankId = new Map(Object.values(encyclopedia).map(v => [v.name, v.tank_id]));
-      memTagToTankId  = new Map(Object.values(encyclopedia).map(v => [v.tag,  v.tank_id]));
-      // Persist to SQLite so the next startup skips the network call
-      cacheService.saveWgDataCache(config.accountId, tankStats, encyclopedia);
-      return { tankStats, encyclopedia };
-    } catch (e) {
-      // Don't cache failed requests
-      clearMemCache();
-      throw e;
-    } finally {
-      pendingWgData = null;
-    }
-  })();
-
-  return pendingWgData;
-}
-
-async function getWn8Exp(): Promise<Map<number, wgService.Wn8ExpEntry> | null> {
-  if (memWn8Exp && Date.now() - memWn8ExpFetchedAt < WN8_EXP_TTL) return memWn8Exp;
-  try {
-    memWn8Exp = await wgService.getWn8ExpectedValues();
-    memWn8ExpFetchedAt = Date.now();
-  } catch (e) {
-    console.warn('[WN8] Failed to fetch expected values, falling back to approximation:', e instanceof Error ? e.message : e);
-    memWn8Exp = null;
-  }
-  return memWn8Exp;
-}
-
-function expForTank(tankId: number): import('../../shared/utils/wn8').Wn8Expected | undefined {
-  return memWn8Exp?.get(tankId);
-}
-
-function buildTank(t: wgService.WgTankStat, vehicle: wgService.WgVehicle | undefined): Tank {
-  const stats = t.all;
-  const battles = stats.battles;
-  const exp = expForTank(t.tank_id);
-  return {
-    tankId: t.tank_id,
-    name: vehicle?.name || `Tank #${t.tank_id}`,
-    tier: vehicle?.tier || 0,
-    type: vehicle?.type || 'unknown',
-    nation: vehicle?.nation || 'unknown',
-    isPremium: vehicle?.is_premium || false,
-    battles,
-    wins: stats.wins,
-    winRate: battles > 0 ? Math.round((stats.wins / battles) * 1000) / 10 : 0,
-    wn8: calculateWn8(stats, exp),
-    wnx: calculateWnx(stats, exp),
-    hasExpectedValues: !!exp,
-    avgDamage: battles > 0 ? Math.round(stats.damage_dealt / battles) : 0,
-    avgDamageAssisted: Math.round(stats.avg_damage_assisted_radio ?? stats.avg_damage_assisted ?? 0),
-    avgDamageAssistedTrack: Math.round(stats.avg_damage_assisted_track ?? 0),
-    avgDamageBlocked: Math.round(stats.avg_damage_blocked ?? 0),
-    avgFrags: battles > 0 ? Math.round((stats.frags / battles) * 100) / 100 : 0,
-    avgSpots: battles > 0 ? Math.round((stats.spotted / battles) * 100) / 100 : 0,
-    survivalRate: battles > 0 ? Math.round((stats.survived_battles / battles) * 1000) / 10 : 0,
-    avgXp: battles > 0 ? Math.round(stats.xp / battles) : 0,
-  };
-}
-
-const CLASS_LABELS: Record<string, string> = {
-  heavyTank: 'Heavy Tank',
-  mediumTank: 'Medium Tank',
-  lightTank: 'Light Tank',
-  'AT-SPG': 'Tank Destroyer',
-  SPG: 'Artillery',
-};
-
-function computeOverallWn8AndWnx(tankStats: wgService.WgTankStat[]): { wn8: number; wnx: number } {
-  let totalBattles = 0;
-  let totalWn8Weighted = 0;
-  let totalWnxWeighted = 0;
-  for (const t of tankStats) {
-    if (t.all.battles === 0) continue;
-    const exp = expForTank(t.tank_id);
-    // When the XVM expected-values map is loaded, skip tanks that have no entry —
-    // this matches tomato.gg / noobmeter behaviour (fallback formula distorts the overall).
-    if (memWn8Exp && !exp) continue;
-    totalWn8Weighted += calculateWn8(t.all, exp) * t.all.battles;
-    totalWnxWeighted += calculateWnx(t.all, exp) * t.all.battles;
-    totalBattles += t.all.battles;
-  }
-  if (totalBattles === 0) return { wn8: 0, wnx: 0 };
-  return {
-    wn8: Math.round(totalWn8Weighted / totalBattles),
-    wnx: Math.round(totalWnxWeighted / totalBattles),
-  };
-}
-
-function buildPlayerContext(
-  tankStats: wgService.WgTankStat[],
-  encyclopedia: Record<number, wgService.WgVehicle>,
-): PlayerContext {
-  const byClass: Record<string, { battles: number; wins: number; wn8Weighted: number }> = {};
-  let totalBattles = 0;
-  let totalWins = 0;
-  let totalWn8Weighted = 0;
-
-  for (const t of tankStats) {
-    if (t.all.battles === 0) continue;
-    const rawType = encyclopedia[t.tank_id]?.type || 'unknown';
-    const label = CLASS_LABELS[rawType] || rawType;
-    if (!byClass[label]) byClass[label] = { battles: 0, wins: 0, wn8Weighted: 0 };
-    const wn8 = calculateWn8(t.all);
-    byClass[label].battles += t.all.battles;
-    byClass[label].wins += t.all.wins;
-    byClass[label].wn8Weighted += wn8 * t.all.battles;
-    totalBattles += t.all.battles;
-    totalWins += t.all.wins;
-    totalWn8Weighted += wn8 * t.all.battles;
-  }
-
-  const byClassResult: PlayerContext['byClass'] = {};
-  for (const [label, s] of Object.entries(byClass)) {
-    byClassResult[label] = {
-      battles: s.battles,
-      winRate: Math.round((s.wins / s.battles) * 1000) / 10,
-      wn8: Math.round(s.wn8Weighted / s.battles),
-    };
-  }
-
-  return {
-    totalBattles,
-    overallWinRate: totalBattles > 0 ? Math.round((totalWins / totalBattles) * 1000) / 10 : 0,
-    overallWn8: totalBattles > 0 ? Math.round(totalWn8Weighted / totalBattles) : 0,
-    byClass: byClassResult,
-  };
 }
 
 function isValidTankDetails(data: unknown): boolean {
@@ -258,12 +53,24 @@ function isValidTankDetails(data: unknown): boolean {
 }
 
 export function registerHandlers(): void {
-  handle('config:get', () => configService.getConfig());
+  // The renderer never receives the raw Claude API key — only a boolean flag.
+  // This keeps the key out of renderer memory / DevTools.
+  handle('config:get', () => {
+    const { claudeApiKey, ...rest } = configService.getConfig();
+    return { ...rest, hasClaudeApiKey: claudeApiKey.length > 0 };
+  });
 
   handle('config:save', (config) => {
-    const validated = assertConfig(config);
     const prev = configService.getConfig();
-    clearMemCache();
+    // Write-only key contract: a non-empty string replaces the stored key,
+    // anything else (undefined / '') preserves it.
+    const incoming = (config ?? {}) as Record<string, unknown>;
+    const claudeApiKey =
+      typeof incoming.claudeApiKey === 'string' && incoming.claudeApiKey.trim() !== ''
+        ? incoming.claudeApiKey.trim()
+        : prev.claudeApiKey;
+    const validated = assertConfig({ ...incoming, claudeApiKey });
+    wgData.clearMemCache();
     cacheService.clearPlayerInfoCache();
     // If the account changed, the cached WG data belongs to a different player
     if (prev.accountId !== validated.accountId) {
@@ -273,7 +80,7 @@ export function registerHandlers(): void {
   });
 
   handle('player:search', (username, region) =>
-    wgService.searchPlayer(assertString(username, 'username'), WG_API_KEY, assertString(region, 'region'))
+    wgService.searchPlayer(assertString(username, 'username'), wgData.WG_API_KEY, assertString(region, 'region'))
   );
 
   handle('player:info', async () => {
@@ -286,12 +93,12 @@ export function registerHandlers(): void {
     // so we ensure tank stats and XVM expected values are loaded even if tanks:list hasn't
     // been called yet this session. Both are in-memory cached so after first call this is instant.
     const [playerInfo, { tankStats }, _wn8Exp] = await Promise.all([
-      wgService.getPlayerInfo(config.accountId, WG_API_KEY, config.region),
-      getWgData(config),
-      getWn8Exp(), // warms memWn8Exp cache for accurate per-tank WN8 calculations
+      wgService.getPlayerInfo(config.accountId, wgData.WG_API_KEY, config.region),
+      wgData.getWgData(config),
+      wgData.getWn8Exp(), // warms expected-values cache for accurate per-tank WN8 calculations
     ]);
     const stats = playerInfo.statistics.all;
-    const overall = computeOverallWn8AndWnx(tankStats);
+    const overall = wgData.computeOverallWn8AndWnx(tankStats);
     const wn8 = overall.wn8;
     const result = {
       accountId: playerInfo.account_id,
@@ -328,15 +135,15 @@ export function registerHandlers(): void {
   handle('tanks:list', async () => {
     const config = configService.getConfig();
     const [{ tankStats, encyclopedia }] = await Promise.all([
-      getWgData(config),
-      getWn8Exp(),  // pre-warm expected values cache in parallel
+      wgData.getWgData(config),
+      wgData.getWn8Exp(),  // pre-warm expected values cache in parallel
     ]);
 
-    cacheService.backfillMissingWnx(computeOverallWn8AndWnx(tankStats).wnx);
+    cacheService.backfillMissingWnx(config.accountId, wgData.computeOverallWn8AndWnx(tankStats).wnx);
 
     return tankStats
       .filter(t => t.all.battles > 0)
-      .map(t => buildTank(t, encyclopedia[t.tank_id]))
+      .map(t => wgData.buildTank(t, encyclopedia[t.tank_id]))
       .sort((a, b) => b.battles - a.battles);
   });
 
@@ -346,13 +153,13 @@ export function registerHandlers(): void {
     if (cached && isValidTankDetails(cached.data)) return cached.data;
 
     const config = configService.getConfig();
-    const { tankStats, encyclopedia } = await getWgData(config);
+    const { tankStats, encyclopedia } = await wgData.getWgData(config);
     const tankStat = tankStats.find(t => t.tank_id === id);
     if (!tankStat) throw new Error(`Tank ${id} not found`);
 
     const prevDetails = isValidTankDetails(cached?.data) ? (cached!.data as TankDetails) : undefined;
     const details: TankDetails = {
-      ...buildTank(tankStat, encyclopedia[id]),
+      ...wgData.buildTank(tankStat, encyclopedia[id]),
       mapStats: prevDetails?.mapStats ?? [],
       recommendations: prevDetails?.recommendations ?? null,
       rawStats: { ...tankStat.all } as Record<string, number>,
@@ -369,11 +176,12 @@ export function registerHandlers(): void {
 
     if (!isValidTankDetails(cached.data)) throw new Error('Cached tank data is corrupted');
     const details = cached.data as TankDetails;
-    if (details.recommendations && !assertBoolean(force, 'force')) return details;
+    if (details.recommendations && force !== true) return details;
 
     const config = configService.getConfig();
-    const playerContext = memTankStats && memEncyclopedia
-      ? buildPlayerContext(memTankStats, memEncyclopedia)
+    const memData = wgData.getMemWgData();
+    const playerContext = memData
+      ? wgData.buildPlayerContext(memData.tankStats, memData.encyclopedia)
       : undefined;
 
     const replayContext = cacheService.getReplayTankContext(config.accountId, details.name);
@@ -397,11 +205,10 @@ export function registerHandlers(): void {
     const force = forceRaw === true;
 
     const config = configService.getConfig();
-    if (!config.claudeApiKey) throw new Error('AI not configured. Please set your Claude API key in Settings.');
 
     return withAICache<BattleDebrief>({
       force,
-      getCached: () => cacheService.getBattleDebrief(arenaId),
+      getCached: () => cacheService.getBattleDebrief(config.accountId, arenaId),
       saveCached: (d) => cacheService.saveBattleDebrief(arenaId, config.accountId, d),
       compute: async () => {
         const battle = cacheService.getBattleByArenaId(config.accountId, arenaId);
@@ -409,11 +216,10 @@ export function registerHandlers(): void {
         if (battle.result === 'incomplete') throw new Error('Cannot debrief an incomplete battle');
 
         // Gather expected values for this tank (same lookup chain as replays:list)
-        await Promise.all([getWn8Exp(), getWgData(config)]);
-        const extractedTag = extractVehicleTag(battle.tankKey);
-        const tankId = memTagToTankId?.get(extractedTag) ?? memNameToTankId?.get(battle.tankName);
-        const expEntry = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
-        const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
+        await Promise.all([wgData.getWn8Exp(), wgData.getWgData(config)]);
+        const tankId = wgData.resolveTankId(battle.tankKey, battle.tankName);
+        const expEntry = tankId !== undefined ? wgData.expForTank(tankId) : undefined;
+        const vehicle = wgData.getVehicle(tankId);
         const baseline = cacheService.getTankBaseline(config.accountId, battle.tankKey, THIRTY_DAYS_MS);
 
         return runBattleDebrief({ battle, vehicle, expEntry, baseline }, config.claudeApiKey);
@@ -427,7 +233,6 @@ export function registerHandlers(): void {
   handle('coach:weekly-report', async (forceRaw) => {
     const force = forceRaw === true;
     const config = configService.getConfig();
-    if (!config.claudeApiKey) throw new Error('AI not configured. Please set your Claude API key in Settings.');
 
     const endMs = Date.now();
     const isoWeek = getIsoWeek(endMs);
@@ -448,6 +253,21 @@ export function registerHandlers(): void {
     });
   });
 
+  // ai:usage — today's free-tier usage, so the UI can show remaining counts.
+  // Returns null when the user has their own Claude key (unlimited — nothing
+  // to count) or when the free AI proxy is unreachable (fail silently, this
+  // is a non-critical status check).
+  handle('ai:usage', async (): Promise<FreeAIUsageInfo | null> => {
+    const config = configService.getConfig();
+    if (config.claudeApiKey) return null;
+    try {
+      return await getFreeAIUsage();
+    } catch (e) {
+      console.warn('[ai:usage] Failed to fetch free AI usage:', e instanceof Error ? e.message : e);
+      return null;
+    }
+  });
+
   handle('coach:report-history', (limitRaw) => {
     const config = configService.getConfig();
     const limitRequested = assertOptionalNumber(limitRaw, 'limit', 10);
@@ -456,16 +276,18 @@ export function registerHandlers(): void {
   });
 
   handle('cache:clearMem', () => {
-    clearMemCache();
+    wgData.clearMemCache();
   });
 
   handle('cache:clearPlayerInfo', () => {
     cacheService.clearPlayerInfoCache();
   });
 
+  // Clears WG API + AI caches but preserves the parsed battle database —
+  // old replay files may no longer exist on disk, so battles are not recoverable.
   handle('cache:clear', () => {
-    clearMemCache();
-    cacheService.clearAll();
+    wgData.clearMemCache();
+    cacheService.clearApiCaches();
   });
 
   handle('cache:stats', () => cacheService.getStats());
@@ -511,91 +333,12 @@ export function registerHandlers(): void {
   handle('replays:clear', () => {
     const config = configService.getConfig();
     cacheService.clearBattles(config.accountId);
-    lastScanTime = 0;
-    cacheService.setLastScanTime(config.accountId, 0);
+    replayScan.resetScanState(config.accountId);
   });
 
-  handle('replays:scan', async (quick) => {
+  handle('replays:scan', () => {
     const config = configService.getConfig();
-    if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
-    // Restore persisted scan time on first call after startup so that restarts
-    // don't force a full re-parse of every replay file in the library.
-    if (lastScanTime === 0) {
-      lastScanTime = cacheService.getLastScanTime(config.accountId);
-    }
-    // Incremental scan: only parse replay files whose filename date is within a
-    // 30-minute safety buffer of the last scan. The buffer must cover the maximum
-    // WoT battle length (~15 min) because replay filenames encode the battle START
-    // time, not the file write time — a battle that started 14 min before the last
-    // scan and ended after it would be permanently missed with a shorter buffer.
-    // INSERT OR IGNORE handles any re-processed duplicates.
-    const sinceMs = lastScanTime > 0 ? lastScanTime - 30 * MINUTE : undefined;
-    // For incremental scans, skip loading all arena IDs from SQLite — the filename-date
-    // filter already limits parsing to recent files, and INSERT OR IGNORE handles any
-    // accidental duplicates. Loading 100k+ IDs on every restart is what caused the
-    // 5-second startup delay. Only do the full load for genuine full scans (first run
-    // ever, or after the user clears the replay cache).
-    const knownIds = sinceMs !== undefined
-      ? new Set<string>()
-      : cacheService.getKnownArenaIds(config.accountId);
-    const result = await replayParser.scanReplays(
-      config.replaysDir,
-      config.accountId,
-      config.username,
-      knownIds,
-      (batch) => cacheService.insertBattles(batch as BattleRecord[]),
-      sinceMs,
-    );
-    lastScanTime = Date.now();
-    cacheService.setLastScanTime(config.accountId, lastScanTime);
-    // WoT rewrites replay files with full stats after battle end, even for
-    // battles the player left early. The scan inserts the complete version
-    // under its real arenaUniqueID; clean up the stale partial_ counterparts.
-    cacheService.cleanupPartialBattles(config.accountId);
-
-    // Re-parse any remaining partial battles by reading their original .wotreplay files.
-    // The incremental scan's filename-date filter skips files whose name timestamp has moved
-    // outside the 2-minute safety window, even if WoT has since appended block1 to them.
-    // Reading them directly here costs one stat+read per pending partial — negligible.
-    const partials = cacheService.getPartialBattles(config.accountId);
-    if (partials.length > 0) {
-      for (const partial of partials) {
-        const filename = partial.arenaId.slice('partial_'.length);
-        const filePath = path.join(config.replaysDir, `${filename}.wotreplay`);
-        const reParsed = replayParser.parseReplay(filePath);
-        if (reParsed && reParsed.result !== 'incomplete') {
-          cacheService.resolvePartialBattle(config.accountId, partial.arenaId, {
-            ...reParsed,
-            id: 0,
-            accountId: config.accountId,
-          } as BattleRecord);
-          result.added++;
-        }
-      }
-
-      // Fallback: if WoT did not rewrite the dated file (observed on some Windows setups),
-      // check temp.wotreplay — WoT appends block1 there when the server battle ends.
-      const stillPartials = cacheService.getPartialBattles(config.accountId);
-      if (stillPartials.length > 0) {
-        const tempPath = path.join(config.replaysDir, 'temp.wotreplay');
-        const tempParsed = replayParser.parseReplay(tempPath);
-        if (tempParsed && tempParsed.result !== 'incomplete') {
-          for (const partial of stillPartials) {
-            if (partial.tankKey === tempParsed.tankKey && partial.playedAt === tempParsed.playedAt) {
-              cacheService.resolvePartialBattle(config.accountId, partial.arenaId, {
-                ...tempParsed,
-                id: 0,
-                accountId: config.accountId,
-              } as BattleRecord);
-              result.added++;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    return result;
+    return replayScan.scanReplayDirectory(config);
   });
 
   handle('replays:list', async (limit, offset) => {
@@ -607,15 +350,12 @@ export function registerHandlers(): void {
     );
     // Ensure expected values and name→tankId mapping are loaded.
     // Both are in-memory cached so after first call this is instant.
-    await Promise.all([getWn8Exp(), getWgData(config)]);
+    await Promise.all([wgData.getWn8Exp(), wgData.getWgData(config)]);
 
     return battles.map(b => {
-      // Prefer tag-based lookup (exact match to WG internal vehicle tag) over name matching
-      const extractedTag = extractVehicleTag(b.tankKey);
-      const tankId = memTagToTankId?.get(extractedTag)
-        ?? memNameToTankId?.get(b.tankName);
-      const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
-      const vehicle = tankId !== undefined ? memEncyclopedia?.[tankId] : undefined;
+      const tankId = wgData.resolveTankId(b.tankKey, b.tankName);
+      const exp = tankId !== undefined ? wgData.expForTank(tankId) : undefined;
+      const vehicle = wgData.getVehicle(tankId);
       // When the XVM expected-values map is loaded but has no entry for this tank
       // (e.g. recently added vehicles not yet covered by XVM), skip WN8/WNX rather
       // than running the rough fallback formula. The fallback produces wildly inflated
@@ -623,8 +363,7 @@ export function registerHandlers(): void {
       // was designed for multi-battle averages, not individual games.
       // Consistent with computeOverallWn8AndWnx and replays:recent-stats which both
       // already skip tanks without expected values.
-      const hasExp = exp !== undefined;
-      const noExpMap = memWn8Exp !== null && !hasExp;
+      const noExpMap = wgData.hasExpMap() && exp === undefined;
       const single = {
         battles: 1,
         wins: b.result === 'win' ? 1 : 0,
@@ -657,16 +396,16 @@ export function registerHandlers(): void {
   handle('replays:recent-stats', async (limitRaw) => {
     const config = configService.getConfig();
     const limit = assertOptionalNumber(limitRaw, 'limit', 1000);
-    await Promise.all([getWgData(config), getWn8Exp()]);
+    await Promise.all([wgData.getWgData(config), wgData.getWn8Exp()]);
     const groups = cacheService.getRecentBattlesByTank(config.accountId, limit);
     let totalBattles = 0;
     let totalWn8Weighted = 0;
     let totalWnxWeighted = 0;
     for (const g of groups) {
       if (g.battles === 0) continue;
-      const tankId = memTagToTankId?.get(extractVehicleTag(g.tankKey));
-      const exp = tankId !== undefined ? memWn8Exp?.get(tankId) : undefined;
-      if (memWn8Exp && !exp) continue;
+      const tankId = wgData.resolveTankId(g.tankKey, '');
+      const exp = tankId !== undefined ? wgData.expForTank(tankId) : undefined;
+      if (wgData.hasExpMap() && !exp) continue;
       const stats = {
         battles: g.battles,
         wins: g.wins,

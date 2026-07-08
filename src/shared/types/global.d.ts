@@ -1,12 +1,15 @@
-import type { AppConfig, PlayerInfo, Tank, TankDetails, CacheStats, ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief, WeeklyCoachReport } from './index';
-import type { ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary, TodaySession } from '../../main/services/cache';
-import type { DetectedPlayer } from '../../main/services/replay-parser';
+import type {
+  RendererConfig, RendererConfigUpdate, PlayerInfo, Tank, TankDetails, CacheStats,
+  ProgressSnapshot, NewsItem, PatchItem, BattleRecord, UpdateInfo, BattleDebrief,
+  WeeklyCoachReport, ReplayMapStat, ReplayTankStat, EconomyDay, SessionSummary,
+  TodaySession, DetectedPlayer, FreeAIUsageInfo,
+} from './index';
 
 declare global {
   interface Window {
     api: {
-      getConfig(): Promise<AppConfig>;
-      saveConfig(config: AppConfig): Promise<void>;
+      getConfig(): Promise<RendererConfig>;
+      saveConfig(config: RendererConfigUpdate): Promise<void>;
       searchPlayer(username: string, region: string): Promise<{ account_id: number; nickname: string }[]>;
       getPlayerInfo(): Promise<PlayerInfo>;
       getTankList(): Promise<Tank[]>;
@@ -19,7 +22,7 @@ declare global {
       getNews(): Promise<NewsItem[]>;
       getPatches(): Promise<PatchItem[]>;
       clearBattles(): Promise<void>;
-      scanReplays(quick?: boolean): Promise<{ added: number; skipped: number; errors: number }>;
+      scanReplays(): Promise<{ added: number; skipped: number; errors: number }>;
       getTodaySession(): Promise<TodaySession | null>;
       detectPlayer(): Promise<DetectedPlayer | null>;
       detectAllPlayers(): Promise<DetectedPlayer[]>;
@@ -39,6 +42,7 @@ declare global {
       getBattleDebrief(arenaId: string, force?: boolean): Promise<BattleDebrief>;
       getWeeklyReport(force?: boolean): Promise<WeeklyCoachReport>;
       getReportHistory(limit?: number): Promise<{ isoWeek: string; createdAt: number }[]>;
+      getAIUsage(): Promise<FreeAIUsageInfo | null>;
     };
   }
 }

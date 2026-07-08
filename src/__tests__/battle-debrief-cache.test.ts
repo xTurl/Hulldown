@@ -150,11 +150,12 @@ function createFakeDb(): FakeDb {
             return undefined;
           }
 
-          // SELECT json FROM battle_debriefs WHERE arena_id = ?
-          if (/FROM battle_debriefs/i.test(trimmed) && /WHERE arena_id/i.test(trimmed)) {
+          // SELECT json FROM battle_debriefs WHERE account_id = ? AND arena_id = ?
+          if (/FROM battle_debriefs/i.test(trimmed) && /WHERE account_id/i.test(trimmed) && /arena_id/i.test(trimmed)) {
             const rows = tables.get('battle_debriefs') ?? [];
-            const arenaId = args[0] as string;
-            return rows.find(r => r.arena_id === arenaId);
+            const acctId = args[0] as number;
+            const arenaId = args[1] as string;
+            return rows.find(r => r.account_id === acctId && r.arena_id === arenaId);
           }
 
           // getTankBaseline: SELECT ... FROM battles WHERE account_id=? AND tank_key=? AND ... AND played_at >= ?
@@ -293,6 +294,8 @@ function makeBattle(overrides: Partial<BattleRecord> = {}): BattleRecord {
     marksOnGun: 0,
     lifeTime: 590,
     achievements: [],
+    abandoned: false,
+    statsEstimated: false,
     ...overrides,
   };
 }
@@ -326,13 +329,13 @@ afterEach(() => {
 
 describe('getBattleDebrief', () => {
   it('returns null when no debrief exists', () => {
-    expect(getBattleDebrief('nonexistent-arena')).toBeNull();
+    expect(getBattleDebrief(1000, 'nonexistent-arena')).toBeNull();
   });
 
   it('returns stored debrief after save', () => {
     const debrief = makeDebrief();
     saveBattleDebrief('arena-42', 1000, debrief);
-    const result = getBattleDebrief('arena-42');
+    const result = getBattleDebrief(1000, 'arena-42');
     expect(result).not.toBeNull();
     expect(result!.summary).toBe(debrief.summary);
     expect(result!.wentWell).toEqual(debrief.wentWell);
@@ -344,8 +347,13 @@ describe('getBattleDebrief', () => {
   it('replaces existing debrief on second save (REPLACE semantic)', () => {
     saveBattleDebrief('arena-42', 1000, makeDebrief({ summary: 'First' }));
     saveBattleDebrief('arena-42', 1000, makeDebrief({ summary: 'Second' }));
-    const result = getBattleDebrief('arena-42');
+    const result = getBattleDebrief(1000, 'arena-42');
     expect(result!.summary).toBe('Second');
+  });
+
+  it('does not return another account\'s debrief for the same arena', () => {
+    saveBattleDebrief('arena-42', 1000, makeDebrief({ summary: 'Account 1000' }));
+    expect(getBattleDebrief(2000, 'arena-42')).toBeNull();
   });
 });
 
@@ -359,9 +367,9 @@ describe('clearBattleDebriefs', () => {
     saveBattleDebrief('arena-2', 1000, makeDebrief());
     saveBattleDebrief('arena-3', 2000, makeDebrief());
     clearBattleDebriefs();
-    expect(getBattleDebrief('arena-1')).toBeNull();
-    expect(getBattleDebrief('arena-2')).toBeNull();
-    expect(getBattleDebrief('arena-3')).toBeNull();
+    expect(getBattleDebrief(1000, 'arena-1')).toBeNull();
+    expect(getBattleDebrief(1000, 'arena-2')).toBeNull();
+    expect(getBattleDebrief(2000, 'arena-3')).toBeNull();
   });
 
   it('clears only the specified account debriefs when accountId passed', () => {
@@ -369,9 +377,9 @@ describe('clearBattleDebriefs', () => {
     saveBattleDebrief('arena-2', 1000, makeDebrief());
     saveBattleDebrief('arena-3', 2000, makeDebrief());
     clearBattleDebriefs(1000);
-    expect(getBattleDebrief('arena-1')).toBeNull();
-    expect(getBattleDebrief('arena-2')).toBeNull();
-    expect(getBattleDebrief('arena-3')).not.toBeNull(); // account 2000 unaffected
+    expect(getBattleDebrief(1000, 'arena-1')).toBeNull();
+    expect(getBattleDebrief(1000, 'arena-2')).toBeNull();
+    expect(getBattleDebrief(2000, 'arena-3')).not.toBeNull(); // account 2000 unaffected
   });
 });
 

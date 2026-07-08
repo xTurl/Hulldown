@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useTanksStore } from '../stores/tanks';
-import { getWn8Color, getWrColor } from '../../shared/utils/wn8';
+import { getWn8Color } from '../../shared/utils/wn8';
 import type { Tank } from '../../shared/types';
 
 const tanksStore = useTanksStore();

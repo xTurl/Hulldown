@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { callClaude } from '../services/claude';
-import { BATTLE_DEBRIEF_SYSTEM } from './prompts';
+import { sanitizeForPrompt } from '../services/claude';
+import { callAI } from '../services/ai-gateway';
+import { BATTLE_DEBRIEF_SYSTEM } from '../../shared/ai/prompts';
 import type { BattleRecord, BattleDebrief } from '../../shared/types';
 import type { WgVehicle, Wn8ExpEntry } from '../services/wargaming';
 import type { TankBaseline } from '../services/cache';
@@ -98,12 +99,15 @@ export async function runBattleDebrief(
 
   const performance = computePerformanceLabels(battle, expEntry, baseline);
 
+  // Free-text fields originate from replay files / the WG API — sanitize them
+  // before they are embedded in the prompt (prompt-injection hardening,
+  // consistent with tank recommendations).
   const userPayload = {
     tank: {
-      name: battle.tankName.replace(/ v\d+$/, ''),
+      name: sanitizeForPrompt(battle.tankName.replace(/ v\d+$/, '')),
       tier: vehicle?.tier ?? null,
-      type: vehicle?.type ?? null,
-      nation: vehicle?.nation ?? null,
+      type: vehicle?.type ? sanitizeForPrompt(vehicle.type) : null,
+      nation: vehicle?.nation ? sanitizeForPrompt(vehicle.nation) : null,
       isPremium: vehicle?.is_premium ?? null,
     },
     battle: {
@@ -120,8 +124,8 @@ export async function runBattleDebrief(
       survived: battle.survived,
       lifeTime: battle.lifeTime,
       result: battle.result,
-      mapName: battle.mapName,
-      battleType: battle.battleType,
+      mapName: sanitizeForPrompt(battle.mapName),
+      battleType: sanitizeForPrompt(battle.battleType),
       duration: battle.duration,
       damageReceived: battle.damageReceived,
       droppedCapture: battle.droppedCapture,
@@ -141,8 +145,9 @@ export async function runBattleDebrief(
     performance,
   };
 
-  const debriefResponse = await callClaude({
+  const debriefResponse = await callAI({
     apiKey,
+    feature: 'debrief',
     model: DEBRIEF_MODEL,
     system: BATTLE_DEBRIEF_SYSTEM,
     user: JSON.stringify(userPayload),

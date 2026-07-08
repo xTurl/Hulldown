@@ -30,7 +30,7 @@ describe('replays:scan handler — scanReplays async behavior', () => {
   it('should return a Promise from scanReplays (async function)', async () => {
     mockReaddirAsync.mockResolvedValue([]);
 
-    const result = scanReplays('/replays', 112233, 'Player', new Set(), () => {});
+    const result = scanReplays('/replays', 112233, new Set(), () => {});
 
     // Result should be a Promise
     expect(result).toBeInstanceOf(Promise);
@@ -45,7 +45,7 @@ describe('replays:scan handler — scanReplays async behavior', () => {
   it('should use async readdir (fs.promises.readdir) not sync', async () => {
     mockReaddirAsync.mockResolvedValue([]);
 
-    await scanReplays('/replays', 112233, 'Player', new Set(), () => {});
+    await scanReplays('/replays', 112233, new Set(), () => {});
 
     // Verify async readdir was called
     expect(mockReaddirAsync).toHaveBeenCalledWith('/replays');
@@ -54,7 +54,7 @@ describe('replays:scan handler — scanReplays async behavior', () => {
   it('should handle async readdir rejection gracefully', async () => {
     mockReaddirAsync.mockRejectedValue(new Error('ENOENT: no such file'));
 
-    const result = await scanReplays('/nonexistent', 112233, 'Player', new Set(), () => {});
+    const result = await scanReplays('/nonexistent', 112233, new Set(), () => {});
 
     // Should return empty result on rejection
     expect(result.added).toBe(0);
@@ -66,7 +66,7 @@ describe('replays:scan handler — scanReplays async behavior', () => {
     mockReaddirAsync.mockResolvedValue([]);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', 112233, 'Player', new Set(), (batch) => {
+    const result = await scanReplays('/replays', 112233, new Set(), (batch) => {
       batches.push(batch);
     });
 

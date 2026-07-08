@@ -1,0 +1,17 @@
+name = "hulldown-ai-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Created via `npm run db:create` — copy the generated database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "hulldown-ai-usage"
+database_id = "e0ef1bc5-f57f-4b88-a8d2-c0473fe43cd3"
+
+# Daily cleanup of usage rows older than 30 days — purely housekeeping,
+# the free D1 tier's 5GB storage would take years to fill up without it.
+[triggers]
+crons = ["0 3 * * *"]
+
+# Set the real value with: wrangler secret put GROQ_API_KEY
+# [vars] is NOT used for this — secrets must never be committed to wrangler.toml.

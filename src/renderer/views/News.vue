@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { NewsItem } from '../../shared/types';
+import { useAsyncData } from '../composables/useAsyncData';
+import { formatPubDate as formatDate } from '../utils/format';
 
-const items = ref<NewsItem[]>([]);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const { data: items, loading, error, lastFetched, load } = useAsyncData<NewsItem[]>(
+  () => window.api.getNews(),
+  [],
+);
 const filter = ref<'all' | 'events' | 'high'>('all');
-const lastFetched = ref<number | null>(null);
 
 const highValueCount = computed(() => items.value.filter(i => i.valueLevel === 'high').length);
 const eventCount = computed(() => items.value.filter(i => i.isEvent).length);
@@ -17,27 +19,8 @@ const displayed = computed(() => {
   return items.value;
 });
 
-function formatDate(pubDate: string): string {
-  if (!pubDate) return '';
-  const d = new Date(pubDate);
-  return isNaN(d.getTime()) ? pubDate : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 function openLink(url: string) {
   window.api.openExternal(url);
-}
-
-async function load() {
-  loading.value = true;
-  error.value = null;
-  try {
-    items.value = await window.api.getNews();
-    lastFetched.value = Date.now();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to fetch news';
-  } finally {
-    loading.value = false;
-  }
 }
 
 onMounted(load);

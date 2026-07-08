@@ -334,6 +334,8 @@ function makeBattle(overrides: Partial<BattleRecord> = {}): BattleRecord {
     marksOnGun: 0,
     lifeTime: 590,
     achievements: [],
+    abandoned: false,
+    statsEstimated: false,
     ...overrides,
   };
 }
@@ -484,7 +486,7 @@ describe('clearBattles — cache eviction', () => {
     const battle2 = makeBattle({ accountId: 8002, arenaId: 'arena-2' });
     insertBattles([battle1, battle2]);
 
-    const cached1 = getKnownArenaIds(8001);
+    getKnownArenaIds(8001); // warm the cache for account 8001
     const cached2 = getKnownArenaIds(8002);
 
     clearBattles(8001);
@@ -527,7 +529,7 @@ describe('invalidateKnownArenaIds — forced refresh', () => {
     const battle2 = makeBattle({ accountId: 9002, arenaId: 'arena-2' });
     insertBattles([battle1, battle2]);
 
-    const cached1 = getKnownArenaIds(9001);
+    getKnownArenaIds(9001); // warm the cache for account 9001
     const cached2 = getKnownArenaIds(9002);
 
     invalidateKnownArenaIds(9001);

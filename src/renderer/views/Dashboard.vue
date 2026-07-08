@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, useTemplateRef } from 'vue';
 import { usePlayerStore } from '../stores/player';
 import { useTanksStore } from '../stores/tanks';
+import { useBattlesInvalidation } from '../composables/useBattlesInvalidation';
 import StatCard from '../components/StatCard.vue';
 import SessionCard from '../components/SessionCard.vue';
 import RecentBattles from '../components/RecentBattles.vue';
@@ -167,6 +168,19 @@ async function sync() {
 }
 
 onMounted(async () => {
+  [progress.value, recentStats.value] = await Promise.all([
+    window.api.getProgress(),
+    window.api.getRecentStats(),
+  ]);
+  if (tanksStore.tankList.length === 0) {
+    await tanksStore.fetchTankList();
+  }
+});
+
+// Refresh battle-derived widgets when the battle database changes elsewhere
+// (Settings clear+rescan, player switch). RecentBattles reloads itself.
+useBattlesInvalidation(async () => {
+  sessionRefreshKey.value++;
   [progress.value, recentStats.value] = await Promise.all([
     window.api.getProgress(),
     window.api.getRecentStats(),

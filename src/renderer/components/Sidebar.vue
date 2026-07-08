@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
+import { useConfigStore } from '../stores/config';
+import { useTanksStore } from '../stores/tanks';
+import { useScanStore } from '../stores/scan';
+import { useToastStore } from '../stores/toast';
 import { useThemeStore } from '../stores/theme';
 import { getWn8Color } from '../../shared/utils/wn8';
 import { computed, ref, onMounted, onUnmounted } from 'vue';
-import type { DetectedPlayer } from '../../main/services/replay-parser';
+import type { DetectedPlayer } from '../../shared/types';
 
 const router = useRouter();
 const route = useRoute();
 const playerStore = usePlayerStore();
+const configStore = useConfigStore();
+const tanksStore = useTanksStore();
+const scanStore = useScanStore();
+const toastStore = useToastStore();
 const themeStore = useThemeStore();
 
 const navItems = [
@@ -67,6 +75,12 @@ const navItems = [
     icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15c.2.6.1 1.3-.3 1.8l-.7.7c-.5.5-1.2.6-1.8.3a4.1 4.1 0 00-3.4 0c-.6.3-1.3.2-1.8-.3l-.7-.7c-.4-.5-.5-1.2-.3-1.8a4.1 4.1 0 000-3.4c-.2-.6-.1-1.3.3-1.8l.7-.7c.5-.4 1.2-.5 1.8-.3a4.1 4.1 0 003.4 0c.6-.2 1.3-.1 1.8.3l.7.7c.4.5.5 1.2.3 1.8a4.1 4.1 0 000 3.4z"/>',
   },
 ];
+
+/** Prefix match so nested routes (e.g. /tanks/123) keep their nav item highlighted. */
+function isActive(path: string): boolean {
+  if (path === '/') return route.path === '/';
+  return route.path === path || route.path.startsWith(path + '/');
+}
 
 const wn8Color = computed(() =>
   playerStore.playerInfo ? getWn8Color(playerStore.playerInfo.wn8 || 0) : 'var(--faint)',
@@ -133,19 +147,19 @@ async function switchPlayer(player: DetectedPlayer) {
 
       if (result && result.length > 0) {
         // Find exact match by name (case-insensitive)
-        const match = result.find((p: any) =>
+        const match = result.find((p) =>
           p.nickname.toLowerCase() === player.playerName.toLowerCase()
         ) || result[0];
         accountId = match.account_id;
         console.log('[SwitchPlayer] Found accountId:', accountId, 'for player:', match.nickname);
       } else {
         // Player not found on WG API
-        alert(`Could not find account ID for "${player.playerName}".\n\nMake sure the player name is correct, or check your internet connection.`);
+        toastStore.error(`Could not find account ID for "${player.playerName}". Make sure the player name is correct, or check your internet connection.`);
         return;
       }
     } catch (e) {
       console.error('[SwitchPlayer] Error:', e);
-      alert(`Failed to look up account ID: ${e instanceof Error ? e.message : String(e)}`);
+      toastStore.error(`Failed to look up account ID: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
   }
@@ -159,11 +173,19 @@ async function switchPlayer(player: DetectedPlayer) {
       username: player.playerName,
       region: player.region,
     });
-    console.log('[SwitchPlayer] Config saved, reloading...');
-    window.location.reload();
+    showPlayerDropdown.value = false;
+    // Reset all player-scoped state instead of reloading the whole window —
+    // views subscribed to the battle version reload their own data.
+    await configStore.loadConfig();
+    playerStore.reset();
+    tanksStore.reset();
+    scanStore.invalidateBattles();
+    router.push('/');
+    await playerStore.fetchPlayerInfo();
+    toastStore.success(`Switched to ${player.playerName}`);
   } catch (e) {
     console.error('[SwitchPlayer] Failed to save config:', e);
-    alert(`Failed to save config: ${e instanceof Error ? e.message : String(e)}`);
+    toastStore.error(`Failed to save config: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 </script>
@@ -185,16 +207,16 @@ async function switchPlayer(player: DetectedPlayer) {
     >
       <template v-if="!collapsed">
         <svg width="36" height="24" viewBox="0 0 96 64" fill="none" class="shrink-0 mr-2.5">
-          <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35"/>
-          <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6"/>
-          <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b"/>
-          <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a"/>
-          <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b"/>
-          <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640"/>
-          <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3"/>
-          <ellipse cx="8"  cy="44" rx="10" ry="3" fill="#181a20"/>
-          <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20"/>
-          <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06"/>
+          <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35" />
+          <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6" />
+          <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b" />
+          <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a" />
+          <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b" />
+          <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640" />
+          <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3" />
+          <ellipse cx="8" cy="44" rx="10" ry="3" fill="#181a20" />
+          <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20" />
+          <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06" />
         </svg>
         <div class="flex flex-col">
           <span class="text-base font-bold text-gold tracking-wide leading-tight">Hulldown</span>
@@ -203,16 +225,16 @@ async function switchPlayer(player: DetectedPlayer) {
       </template>
       <template v-else>
         <svg width="28" height="19" viewBox="0 0 96 64" fill="none" class="shrink-0">
-          <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35"/>
-          <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6"/>
-          <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b"/>
-          <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a"/>
-          <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b"/>
-          <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640"/>
-          <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3"/>
-          <ellipse cx="8"  cy="44" rx="10" ry="3" fill="#181a20"/>
-          <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20"/>
-          <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06"/>
+          <rect x="0" y="44" width="96" height="3" rx="1" fill="#c8a84b" opacity="0.35" />
+          <rect x="14" y="44" width="68" height="16" rx="2" fill="#1e2128" opacity="0.6" />
+          <rect x="28" y="26" width="40" height="20" rx="3" fill="#c8a84b" />
+          <rect x="32" y="22" width="32" height="6" rx="2" fill="#e0bc5a" />
+          <rect x="62" y="30" width="26" height="5" rx="2" fill="#c8a84b" />
+          <rect x="36" y="16" width="16" height="8" rx="2" fill="#b89640" />
+          <rect x="30" y="27" width="36" height="1.5" rx="0.75" fill="#f0d070" opacity="0.3" />
+          <ellipse cx="8" cy="44" rx="10" ry="3" fill="#181a20" />
+          <ellipse cx="88" cy="44" rx="10" ry="3" fill="#181a20" />
+          <ellipse cx="48" cy="46" rx="28" ry="4" fill="#c8a84b" opacity="0.06" />
         </svg>
       </template>
     </div>
@@ -224,20 +246,22 @@ async function switchPlayer(player: DetectedPlayer) {
         :key="item.path"
         @click="router.push(item.path)"
         :title="collapsed ? item.label : undefined"
+        :aria-current="isActive(item.path) ? 'page' : undefined"
         :class="[
           'w-full flex items-center rounded-lg text-sm transition-colors duration-150 relative',
           collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5',
-          route.path === item.path
+          isActive(item.path)
             ? 'bg-gold-bg text-gold font-medium'
             : 'text-muted hover:text-fg hover:bg-sub',
         ]"
       >
         <!-- Active bar -->
         <span
-          v-if="route.path === item.path"
+          v-if="isActive(item.path)"
           class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-gold"
         />
 
+        <!-- eslint-disable vue/no-v-html -- icon paths are static strings defined in this file, not user data -->
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -248,6 +272,7 @@ async function switchPlayer(player: DetectedPlayer) {
           class="w-5 h-5 shrink-0"
           v-html="item.icon"
         />
+        <!-- eslint-enable vue/no-v-html -->
         <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
       </button>
     </div>
@@ -295,7 +320,7 @@ async function switchPlayer(player: DetectedPlayer) {
                   class="w-3 h-3 text-faint shrink-0 transition-transform duration-150"
                   :class="showPlayerDropdown ? 'rotate-180' : ''"
                 >
-                  <polyline points="6 9 12 15 18 9"/>
+                  <polyline points="6 9 12 15 18 9" />
                 </svg>
               </div>
               <div class="flex items-center gap-2 mt-1">
@@ -348,7 +373,7 @@ async function switchPlayer(player: DetectedPlayer) {
               stroke-linejoin="round"
               class="w-4 h-4 text-gold shrink-0"
             >
-              <polyline points="20 6 9 17 4 12"/>
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           </button>
         </div>

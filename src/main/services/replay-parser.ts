@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import type { BattleRecord } from '../../shared/types';
+import type { BattleRecord, DetectedPlayer } from '../../shared/types';
 import { normalizeMapName } from '../../shared/utils/mapNames';
+import { formatTankName } from '../../shared/utils/vehicles';
+
+export { formatTankName };
 
 export type ParsedBattle = Omit<BattleRecord, 'id' | 'accountId'> & {
   playerAccountId?: number;
@@ -24,16 +27,24 @@ function sumCost(value: unknown): number {
   return Number(value) || 0;
 }
 
-export function formatTankName(vehicleKey: string): string {
-  // "uk-GB123_GSOR_1006_v7" or "sweden:S10_Strv_103_0_Series"
-  // Strip the trailing _v<N> version suffix that WG adds to replay vehicle keys
-  // when updating tank models — it is not part of the encyclopedia tag or name.
-  const withoutNation = vehicleKey
-    .replace(/^[^:-]+-/, '').replace(/^[^:]+:/, '')
-    .replace(/_v\d+$/, '');
-  const underscoreIdx = withoutNation.indexOf('_');
-  if (underscoreIdx === -1) return withoutNation;
-  return withoutNation.slice(underscoreIdx + 1).replace(/_/g, ' ');
+// Hard ceiling for a single replay JSON block. Real block0/block1 payloads are
+// well under 5 MB — a larger declared size means a corrupted (or malicious)
+// header, and blindly Buffer.alloc'ing it could exhaust memory.
+const MAX_BLOCK_SIZE = 32 * 1024 * 1024;
+
+/**
+ * Reads a length-prefixed data block (4-byte LE size followed by payload).
+ * Returns null when the declared size is implausible or the file is shorter
+ * than the header claims, instead of allocating an attacker-controlled buffer.
+ */
+function readSizedBlock(fd: number, sizeOffset: number): Buffer | null {
+  const sizeBuf = Buffer.alloc(4);
+  if (fs.readSync(fd, sizeBuf, 0, 4, sizeOffset) !== 4) return null;
+  const size = sizeBuf.readUInt32LE(0);
+  if (size === 0 || size > MAX_BLOCK_SIZE) return null;
+  const buf = Buffer.alloc(size);
+  if (fs.readSync(fd, buf, 0, size, sizeOffset + 4) !== size) return null;
+  return buf;
 }
 
 export function parseReplay(filePath: string): ParsedBattle | null {
@@ -47,11 +58,8 @@ export function parseReplay(filePath: string): ParsedBattle | null {
     if (numBlocks === 0) return null; // empty file
 
     // Read block 0 (battle setup)
-    const size0Buf = Buffer.alloc(4);
-    fs.readSync(fd, size0Buf, 0, 4, 8);
-    const size0 = size0Buf.readUInt32LE(0);
-    const block0Buf = Buffer.alloc(size0);
-    fs.readSync(fd, block0Buf, 0, size0, 12);
+    const block0Buf = readSizedBlock(fd, 8);
+    if (!block0Buf) return null;
     const block0 = JSON.parse(block0Buf.toString('utf-8'));
 
     if (numBlocks < 2) {
@@ -78,15 +86,13 @@ export function parseReplay(filePath: string): ParsedBattle | null {
         droppedCapture: 0, damageReceived: 0, damageBlocked: 0,
         repairCost: 0, netCredits: 0, markOfMastery: 0, marksOnGun: 0,
         lifeTime: 0, achievements: [],
+        abandoned: true, statsEstimated: false,
       };
     }
 
     // Read block 1 (battle results)
-    const size1Buf = Buffer.alloc(4);
-    fs.readSync(fd, size1Buf, 0, 4, 12 + size0);
-    const size1 = size1Buf.readUInt32LE(0);
-    const block1Buf = Buffer.alloc(size1);
-    fs.readSync(fd, block1Buf, 0, size1, 16 + size0);
+    const block1Buf = readSizedBlock(fd, 12 + block0Buf.length);
+    if (!block1Buf) return null;
     const block1 = JSON.parse(block1Buf.toString('utf-8'));
 
     fs.closeSync(fd);
@@ -141,19 +147,22 @@ export function parseReplay(filePath: string): ParsedBattle | null {
       marksOnGun:     personal.marksOnGun              ?? 0,
       lifeTime:       personal.lifeTime                ?? 0,
       achievements:   Array.isArray(personal.achievements) ? personal.achievements : [],
+      abandoned: false, statsEstimated: false,
     };
-  } catch {
+  } catch (e) {
+    // Keep the log low-noise but actionable: one line with file name + reason.
+    console.warn(
+      `[replay-parser] Failed to parse ${path.basename(filePath)}:`,
+      e instanceof Error ? e.message : e,
+    );
     return null;
   } finally {
     if (fd >= 0) try { fs.closeSync(fd); } catch { /* ignore */ }
   }
 }
 
-export interface DetectedPlayer {
-  playerName: string;
-  accountId: number | null;
-  region: string;
-}
+// Canonical definition lives in shared/types (renderer-facing via IPC)
+export type { DetectedPlayer } from '../../shared/types';
 
 function regionFromServer(serverName: string): string {
   const s = (serverName ?? '').toUpperCase();
@@ -179,12 +188,9 @@ export function detectPlayerFromReplays(replayDir: string): DetectedPlayer | nul
       const header = Buffer.alloc(8);
       fs.readSync(fd, header, 0, 8, 0);
       if (header.readUInt32LE(4) < 1) { fs.closeSync(fd); fd = -1; continue; }
-      const sz0 = Buffer.alloc(4);
-      fs.readSync(fd, sz0, 0, 4, 8);
-      const size0 = sz0.readUInt32LE(0);
-      const buf0 = Buffer.alloc(size0);
-      fs.readSync(fd, buf0, 0, size0, 12);
+      const buf0 = readSizedBlock(fd, 8);
       fs.closeSync(fd); fd = -1;
+      if (!buf0) continue;
       const block0 = JSON.parse(buf0.toString('utf-8'));
       if (block0.playerID && block0.playerName && block0.serverName) {
         return {
@@ -219,12 +225,9 @@ export function detectAllPlayersFromReplays(replayDir: string): DetectedPlayer[]
       const header = Buffer.alloc(8);
       fs.readSync(fd, header, 0, 8, 0);
       if (header.readUInt32LE(4) < 1) { fs.closeSync(fd); fd = -1; continue; }
-      const sz0 = Buffer.alloc(4);
-      fs.readSync(fd, sz0, 0, 4, 8);
-      const size0 = sz0.readUInt32LE(0);
-      const buf0 = Buffer.alloc(size0);
-      fs.readSync(fd, buf0, 0, size0, 12);
+      const buf0 = readSizedBlock(fd, 8);
       fs.closeSync(fd); fd = -1;
+      if (!buf0) continue;
       const block0 = JSON.parse(buf0.toString('utf-8'));
 
       // playerID is optional; use it if available, otherwise use playerName+serverName
@@ -268,7 +271,6 @@ function extractFilenameDate(filename: string): number {
 export async function scanReplays(
   replayDir: string,
   accountId: number,
-  playerName: string,
   knownArenaIds: Set<string>,
   onBatch: (battles: (ParsedBattle & { accountId: number })[]) => void,
   sinceMs?: number,

@@ -6,6 +6,7 @@ import { useThemeStore } from './stores/theme';
 import Sidebar from './components/Sidebar.vue';
 import Setup from './views/Setup.vue';
 import ScanToast from './components/ScanToast.vue';
+import ToastContainer from './components/ToastContainer.vue';
 import type { UpdateInfo } from '../shared/types';
 
 // Initialize theme as early as possible
@@ -59,13 +60,16 @@ async function openUpdate() {
     </div>
 
     <ScanToast />
+    <ToastContainer />
     <div class="flex flex-1 overflow-hidden">
       <Setup v-if="needsSetup" @complete="onSetupComplete" />
       <template v-else>
         <Sidebar />
         <main class="flex-1 overflow-y-auto">
+          <!-- Cache only the data-heavy list views. TankDetail (per-id data)
+               and Settings (fresh form state) remount on each visit. -->
           <router-view v-slot="{ Component }">
-            <keep-alive>
+            <keep-alive :include="['Dashboard', 'TankList', 'TankCompare', 'Analytics', 'Coach', 'News', 'Patches', 'Tutorials']">
               <component :is="Component" />
             </keep-alive>
           </router-view>

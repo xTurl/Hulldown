@@ -1,17 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { DetectedPlayer } from '../main/services/replay-parser';
 
 // ---------------------------------------------------------------------------
 // fs mock — must be hoisted before importing the module under test
 // ---------------------------------------------------------------------------
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 const mockReaddirSync = vi.fn<(...args: any[]) => string[]>();
 const mockReaddirAsync = vi.fn<(...args: any[]) => Promise<string[]>>();
 const mockOpenSync = vi.fn<(...args: any[]) => number>();
 const mockReadSync = vi.fn<(...args: any[]) => number>();
 const mockCloseSync = vi.fn<(...args: any[]) => void>();
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 
 
 vi.mock('fs', () => ({
   default: {
@@ -110,7 +109,7 @@ describe('scanReplays — async filesystem operations', () => {
     mockCloseSync.mockReturnValue(undefined);
 
     // Call scanReplays which should use fs.promises.readdir
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
+    const result = await scanReplays('/replays', MY_ID, new Set(), () => {});
 
     // Verify that async readdir was called, not sync readdirSync
     expect(mockReaddirAsync).toHaveBeenCalledWith('/replays');
@@ -122,7 +121,7 @@ describe('scanReplays — async filesystem operations', () => {
   it('should handle fs.promises.readdir rejection gracefully (directory does not exist)', async () => {
     mockReaddirAsync.mockRejectedValue(new Error('ENOENT: no such file or directory'));
 
-    const result = await scanReplays('/nonexistent', 112233, 'Player', new Set(), () => {});
+    const result = await scanReplays('/nonexistent', 112233, new Set(), () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(0);
@@ -132,7 +131,7 @@ describe('scanReplays — async filesystem operations', () => {
   it('should handle fs.promises.readdir rejection gracefully (permission denied)', async () => {
     mockReaddirAsync.mockRejectedValue(new Error('EACCES: permission denied'));
 
-    const result = await scanReplays('/protected', 112233, 'Player', new Set(), () => {});
+    const result = await scanReplays('/protected', 112233, new Set(), () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(0);
@@ -199,7 +198,7 @@ describe('scanReplays — arena_id deduplication', () => {
     setupDir([{ name: '2026-01-01_known.wotreplay', buf }]);
 
     const knownArenaIds = new Set<string>(['known-arena-123']);
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, () => {});
+    const result = await scanReplays('/replays', MY_ID, knownArenaIds, () => {});
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(1);
@@ -212,7 +211,7 @@ describe('scanReplays — arena_id deduplication', () => {
 
     const knownArenaIds = new Set<string>();
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, b => batches.push(b));
+    const result = await scanReplays('/replays', MY_ID, knownArenaIds, b => batches.push(b));
 
     expect(result.added).toBe(1);
     expect(result.skipped).toBe(0);
@@ -229,7 +228,7 @@ describe('scanReplays — arena_id deduplication', () => {
     ]);
 
     const knownArenaIds = new Set<string>();
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, () => {});
+    const result = await scanReplays('/replays', MY_ID, knownArenaIds, () => {});
 
     expect(result.added).toBe(2);
     expect(knownArenaIds.has('arena-X')).toBe(true);
@@ -246,7 +245,7 @@ describe('scanReplays — arena_id deduplication', () => {
     ]);
 
     const knownArenaIds = new Set<string>();
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', knownArenaIds, () => {});
+    const result = await scanReplays('/replays', MY_ID, knownArenaIds, () => {});
 
     // First replay added, second skipped (because arena_id was added to Set after first)
     expect(result.added).toBe(1);
@@ -314,7 +313,7 @@ describe('scanReplays — batch callback behavior', () => {
     setupDirWithCount(100);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', 112233, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', 112233, new Set(), b => batches.push(b));
 
     expect(result.added).toBe(100);
     expect(batches.length).toBe(1);  // One full batch of 100
@@ -328,7 +327,7 @@ describe('scanReplays — batch callback behavior', () => {
     setupDirWithCount(50);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', 112233, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', 112233, new Set(), b => batches.push(b));
 
     expect(result.added).toBe(50);
     expect(batches.length).toBe(1);
@@ -341,7 +340,7 @@ describe('scanReplays — batch callback behavior', () => {
     setupDirWithCount(150);
 
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', 112233, 'SnipeKing', new Set(), b => batches.push(b));
+    const result = await scanReplays('/replays', 112233, new Set(), b => batches.push(b));
 
     expect(result.added).toBe(150);
     expect(batches.length).toBe(2);
@@ -370,7 +369,7 @@ describe('scanReplays — batch callback behavior', () => {
 
     const knownArenaIds = new Set<string>(['arena-1']);
     const batches: unknown[] = [];
-    const result = await scanReplays('/replays', 112233, 'SnipeKing', knownArenaIds, b => batches.push(b));
+    const result = await scanReplays('/replays', 112233, knownArenaIds, b => batches.push(b));
 
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(1);
@@ -438,7 +437,7 @@ describe('scanReplays — ScanResult accuracy', () => {
     );
     mockCloseSync.mockReturnValue(undefined);
 
-    const result = await scanReplays('/replays', MY_ID, 'SnipeKing', new Set(), () => {});
+    const result = await scanReplays('/replays', MY_ID, new Set(), () => {});
 
     expect(result.added).toBe(2);     // arena-1 and arena-2
     expect(result.skipped).toBe(1);   // arena-3 (wrong player)

@@ -3,14 +3,15 @@ import { ref } from 'vue';
 
 export const useScanStore = defineStore('scan', () => {
   const scanning = ref(false);
-  // Set to true when battles are cleared+rescanned from Settings so that
-  // RecentBattles reloads its list the next time it becomes active.
-  const dirty = ref(false);
+  // Central invalidation counter: bumped whenever the battle database changes
+  // (scan found new battles, battles cleared from Settings, player switched).
+  // Views record the version they last rendered and reload when it moves —
+  // see useBattlesInvalidation.
+  const battlesVersion = ref(1);
 
-  function start()      { scanning.value = true; }
-  function stop()       { scanning.value = false; }
-  function markDirty()  { dirty.value = true; }
-  function clearDirty() { dirty.value = false; }
+  function start() { scanning.value = true; }
+  function stop()  { scanning.value = false; }
+  function invalidateBattles() { battlesVersion.value++; }
 
-  return { scanning, dirty, start, stop, markDirty, clearDirty };
+  return { scanning, battlesVersion, start, stop, invalidateBattles };
 });

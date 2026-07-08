@@ -435,6 +435,8 @@ function makeBattle(overrides: Partial<BattleRecord & { played_at?: number }> = 
     marksOnGun: 0,
     lifeTime: 590,
     achievements: [],
+    abandoned: false,
+    statsEstimated: false,
     ...overrides,
   };
 }
