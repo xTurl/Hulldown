@@ -5,6 +5,7 @@
  * entry — packaging then stalls forever at "Copying files" with only
  * locales/da.pak in the temp dir. System unzip works reliably on all versions.
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -17,6 +18,21 @@ const unzipPath = path.join(
 );
 
 const MARKER = 'PATCHED_LINUX_UNZIP_CLI';
+
+function ensureUnzipOnLinux() {
+  if (process.platform !== 'linux') return;
+  try {
+    execFileSync('unzip', ['-v'], { stdio: 'ignore' });
+  } catch {
+    console.error(
+      '[patch-packager-unzip] ERROR: `unzip` is required to package on Linux.\n'
+      + '  Arch/CachyOS: sudo pacman -S unzip',
+    );
+    process.exit(1);
+  }
+}
+
+ensureUnzipOnLinux();
 
 if (fs.readFileSync(unzipPath, 'utf8').includes(MARKER)) {
   process.exit(0);

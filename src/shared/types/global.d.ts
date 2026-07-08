@@ -22,7 +22,7 @@ declare global {
       getNews(): Promise<NewsItem[]>;
       getPatches(): Promise<PatchItem[]>;
       clearBattles(): Promise<void>;
-      scanReplays(): Promise<{ added: number; skipped: number; errors: number }>;
+      scanReplays(): Promise<{ added: number; skipped: number; errors: number; backfilled: number }>;
       getTodaySession(): Promise<TodaySession | null>;
       detectPlayer(): Promise<DetectedPlayer | null>;
       detectAllPlayers(): Promise<DetectedPlayer[]>;

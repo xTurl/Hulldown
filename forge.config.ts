@@ -29,6 +29,17 @@ const config: ForgeConfig = {
     force: false,
   },
   hooks: {
+    prePackage: async () => {
+      const { execFileSync } = await import('node:child_process');
+      execFileSync('node', ['scripts/patch-packager-unzip.mjs'], {
+        cwd: __dirname,
+        stdio: 'inherit',
+      });
+      execFileSync('node', ['scripts/ensure-native-deps.mjs'], {
+        cwd: __dirname,
+        stdio: 'inherit',
+      });
+    },
     postPackage: async (_config, options) => {
       const nativeModules = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
       for (const outputPath of options.outputPaths) {
@@ -41,6 +52,16 @@ const config: ForgeConfig = {
           if (fs.existsSync(from)) {
             fs.renameSync(from, to);
           }
+        }
+        const sqliteNode = path.join(
+          nodeModulesDir,
+          'better-sqlite3/build/Release/better_sqlite3.node',
+        );
+        if (!fs.existsSync(sqliteNode)) {
+          throw new Error(
+            `Packaging failed: ${sqliteNode} is missing. `
+            + 'Run: node scripts/ensure-native-deps.mjs',
+          );
         }
         // Copy app icon so the BrowserWindow icon path always finds it
         const iconSrc = path.join(__dirname, 'assets/icon.png');

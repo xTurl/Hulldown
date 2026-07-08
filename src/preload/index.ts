@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld('api', {
   detectAllPlayers: (): Promise<DetectedPlayer[]> => invoke('player:detect-all'),
   getTankMapStats: (tankName: string): Promise<{ mapName: string; battles: number; winRate: number; avgDamage: number }[]> => invoke('replays:tank-maps', tankName),
   clearBattles: (): Promise<void> => invoke('replays:clear'),
-  scanReplays: (): Promise<{ added: number; skipped: number; errors: number }> => invoke('replays:scan'),
+  scanReplays: (): Promise<{ added: number; skipped: number; errors: number; backfilled: number }> => invoke('replays:scan'),
   getBattles: (limit?: number, offset?: number): Promise<BattleRecord[]> => invoke('replays:list', limit, offset),
   getBattlesCount: (): Promise<number> => invoke('replays:count'),
   getRecentStats: (limit?: number): Promise<{ wn8: number; wnx: number; battles: number }> => invoke('replays:recent-stats', limit),

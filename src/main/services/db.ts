@@ -1,6 +1,19 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
+import fs from 'fs';
 import path from 'path';
+
+function sqliteOptions(): Database.Options | undefined {
+  if (!app.isPackaged) return undefined;
+  const nativeBinding = path.join(
+    process.resourcesPath,
+    'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+  );
+  if (!fs.existsSync(nativeBinding)) {
+    throw new Error(`SQLite native module missing: ${nativeBinding}`);
+  }
+  return { nativeBinding };
+}
 
 let db: Database.Database | undefined;
 
@@ -43,7 +56,7 @@ export function closeDb(): void {
 export function getDb(): Database.Database {
   if (!db) {
     const dbPath = path.join(app.getPath('userData'), 'cache.db');
-    db = new Database(dbPath);
+    db = new Database(dbPath, sqliteOptions());
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
     db.exec(`

@@ -62,7 +62,7 @@ async function scan() {
   try {
     const result = await window.api.scanReplays();
     newCount.value = result.added;
-    if (result.added > 0) {
+    if (result.added > 0 || result.backfilled > 0) {
       totalCount.value = await window.api.getBattlesCount();
       await loadPage(0);
       // Tell other views their battle data is stale; markSeen so this

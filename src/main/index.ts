@@ -1,3 +1,4 @@
+import './setup-packaged-modules';
 import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import started from 'electron-squirrel-startup';

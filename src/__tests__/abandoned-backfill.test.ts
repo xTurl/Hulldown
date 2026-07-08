@@ -3,8 +3,12 @@
  * stats by diffing two WG API tank-stat snapshots and subtracting whatever
  * we already know from replay-parsed battles in the same window.
  */
-import { describe, it, expect } from 'vitest';
-import { resolveAbandonedDelta } from '../main/services/abandoned-backfill';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  resolveAbandonedDelta,
+  resolveFromLifetimeRemainder,
+  prevFromWgDataCache,
+} from '../main/services/abandoned-backfill';
 import type { TankStatSnapshot } from '../main/services/repos/tank-snapshots-repo';
 import type { BattleRecord } from '../shared/types';
 
@@ -41,6 +45,45 @@ function battle(overrides: Partial<BattleRecord> = {}): BattleRecord {
 }
 
 describe('resolveAbandonedDelta', () => {
+  it('resolves using a baseline from before the battle count jumped (EBR-style case)', () => {
+    // Many post-battle snapshots at 829 battles; baseline must be the 828 row.
+    const prev = snapshot({
+      capturedAt: 1783513615882,
+      battles: 828, wins: 431, losses: 390, draws: 7,
+      damageDealt: 983007, frags: 518, spotted: 2775, xp: 654155,
+      assistedDamage: 1279834, survivedBattles: 153,
+    });
+    const curr = snapshot({
+      capturedAt: 1783513900000,
+      battles: 829, wins: 431, losses: 391, draws: 7,
+      damageDealt: 985119, frags: 520, spotted: 2779, xp: 655106,
+      assistedDamage: 1280183, survivedBattles: 153,
+    });
+    const window = [battle({
+      arenaId: 'partial_20260708_1417_france-F108_Panhard_EBR_105_95_lost_city_ctf',
+      playedAt: 1783513078000,
+      result: 'incomplete',
+    })];
+
+    expect(resolveAbandonedDelta(prev, curr, window)).toEqual({
+      result: 'loss',
+      damage: 2112,
+      kills: 2,
+      spotted: 4,
+      droppedCapture: 0,
+      xp: 951,
+      assist: 349,
+      survived: false,
+    });
+  });
+
+  it('returns null when prev and curr share the same battle count (stale pair)', () => {
+    const prev = snapshot({ capturedAt: 1000, battles: 829, wins: 431, losses: 391, damageDealt: 985119, frags: 520 });
+    const curr = snapshot({ capturedAt: 2000, battles: 829, wins: 431, losses: 391, damageDealt: 985119, frags: 520 });
+    const window = [battle({ arenaId: 'abandoned-1', result: 'incomplete' })];
+    expect(resolveAbandonedDelta(prev, curr, window)).toBeNull();
+  });
+
   it('resolves a single abandoned battle with no other battles in the window', () => {
     const prev = snapshot({ capturedAt: 1000 });
     const curr = snapshot({
@@ -148,5 +191,85 @@ describe('resolveAbandonedDelta', () => {
     const patch = resolveAbandonedDelta(prev, curr, window);
 
     expect(patch?.survived).toBe(true);
+  });
+});
+
+describe('resolveFromLifetimeRemainder', () => {
+  it('resolves when DB has every WG battle except one incomplete row', () => {
+    const wg = snapshot({
+      battles: 3, wins: 2, losses: 1, damageDealt: 3000, frags: 3, spotted: 4, xp: 900,
+      assistedDamage: 0, droppedCapturePoints: 0, survivedBattles: 0,
+    });
+    const dbBattles = [
+      battle({ arenaId: 'k1', result: 'win', damage: 1000, kills: 1, spotted: 1, xp: 300 }),
+      battle({ arenaId: 'k2', result: 'loss', damage: 500, kills: 0, spotted: 1, xp: 200 }),
+      battle({ arenaId: 'abandoned-1', result: 'incomplete' }),
+    ];
+
+    expect(resolveFromLifetimeRemainder(wg, dbBattles)).toEqual({
+      result: 'win',
+      damage: 1500,
+      kills: 2,
+      spotted: 2,
+      droppedCapture: 0,
+      xp: 400,
+      assist: 0,
+      survived: false,
+    });
+  });
+
+  it('returns null when DB is missing battles vs WG lifetime count', () => {
+    const wg = snapshot({ battles: 50 });
+    const dbBattles = [
+      battle({ arenaId: 'k1', result: 'win' }),
+      battle({ arenaId: 'abandoned-1', result: 'incomplete' }),
+    ];
+    expect(resolveFromLifetimeRemainder(wg, dbBattles)).toBeNull();
+  });
+});
+
+vi.mock('../main/services/cache', () => ({
+  getWgDataCache: vi.fn(),
+}));
+
+import { getWgDataCache } from '../main/services/cache';
+
+describe('prevFromWgDataCache', () => {
+  beforeEach(() => {
+    vi.mocked(getWgDataCache).mockReset();
+  });
+
+  it('returns a snapshot when cache predates the abandoned battle', () => {
+    vi.mocked(getWgDataCache).mockReturnValue({
+      updatedAt: 1000,
+      tankStats: [{
+        tank_id: 42,
+        all: {
+          battles: 10, wins: 5, losses: 5, draws: 0, survived_battles: 3,
+          damage_dealt: 10000, frags: 8, spotted: 12, dropped_capture_points: 2, xp: 5000,
+          radio_assisted_damage: 1000, track_assisted_damage: 500,
+        },
+      }],
+      encyclopedia: {},
+    });
+
+    const prev = prevFromWgDataCache(1, 42, 2000);
+
+    expect(prev).toEqual({
+      capturedAt: 1000,
+      battles: 10, wins: 5, losses: 5, draws: 0, survivedBattles: 3,
+      damageDealt: 10000, frags: 8, spotted: 12, droppedCapturePoints: 2, xp: 5000,
+      assistedDamage: 1500,
+    });
+  });
+
+  it('returns null when cache is newer than the battle start', () => {
+    vi.mocked(getWgDataCache).mockReturnValue({
+      updatedAt: 3000,
+      tankStats: [{ tank_id: 42, all: { battles: 11, wins: 6, damage_dealt: 12000, frags: 9, spotted: 13, dropped_capture_points: 2, xp: 5400, survived_battles: 3 } }],
+      encyclopedia: {},
+    });
+
+    expect(prevFromWgDataCache(1, 42, 2000)).toBeNull();
   });
 });

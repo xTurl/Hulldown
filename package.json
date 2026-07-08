@@ -9,12 +9,12 @@
     "node": ">=20 <26"
   },
   "scripts": {
-    "postinstall": "node scripts/patch-packager-unzip.mjs && electron-rebuild -f -w better-sqlite3",
+    "postinstall": "node scripts/patch-packager-unzip.mjs && node scripts/ensure-native-deps.mjs",
     "start": "electron-forge start",
     "start:packaged": "out/hulldown-linux-x64/hulldown",
-    "package": "electron-forge package",
+    "package": "node scripts/patch-packager-unzip.mjs && node scripts/ensure-native-deps.mjs && electron-forge package",
     "package:clean": "rm -rf out/hulldown-linux-x64 out-test out/make .tmp \"$HOME/.cache/hulldown/packager-tmp\" /tmp/electron-packager",
-    "make": "electron-forge make",
+    "make": "node scripts/patch-packager-unzip.mjs && node scripts/ensure-native-deps.mjs && electron-forge make",
     "make:deb": "electron-forge make --targets @electron-forge/maker-deb",
     "publish": "electron-forge publish",
     "lint": "eslint .",

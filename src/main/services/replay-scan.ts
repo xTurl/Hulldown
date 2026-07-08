@@ -15,6 +15,8 @@ export interface ScanResult {
   added: number;
   skipped: number;
   errors: number;
+  /** Abandoned battles whose stats were reconstructed from WG API this scan. */
+  backfilled: number;
 }
 
 // Timestamp of the last successful replay scan — used to limit incremental scans
@@ -26,7 +28,7 @@ export function resetScanState(accountId: number): void {
 }
 
 export async function scanReplayDirectory(config: AppConfig): Promise<ScanResult> {
-  if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0 };
+  if (!config.replaysDir) return { added: 0, skipped: 0, errors: 0, backfilled: 0 };
 
   // Restore persisted scan time on first call after startup so that restarts
   // don't force a full re-parse of every replay file in the library.
@@ -51,7 +53,7 @@ export async function scanReplayDirectory(config: AppConfig): Promise<ScanResult
     ? new Set<string>()
     : cacheService.getKnownArenaIds(config.accountId);
 
-  const result = await replayParser.scanReplays(
+  const parserResult = await replayParser.scanReplays(
     config.replaysDir,
     config.accountId,
     knownIds,
@@ -66,13 +68,17 @@ export async function scanReplayDirectory(config: AppConfig): Promise<ScanResult
   // under its real arenaUniqueID; clean up the stale partial_ counterparts.
   cacheService.cleanupPartialBattles(config.accountId);
 
-  result.added += resolvePendingPartials(config);
+  const result: ScanResult = {
+    ...parserResult,
+    added: parserResult.added + resolvePendingPartials(config),
+    backfilled: 0,
+  };
 
-  // Only worth the extra WG API round-trip when this scan actually turned up
-  // something new — an idle library has nothing new to reconcile.
-  if (result.added > 0) {
-    await tryBackfillAbandoned(config);
-  }
+  // Reconcile abandoned battles whenever any are still unresolved — not only
+  // when this scan added new files. The first scan after an abandoned battle
+  // only seeds a WG snapshot; the second scan (often with added=0) is when the
+  // delta can be computed.
+  result.backfilled = await tryBackfillAbandoned(config);
 
   return result;
 }
@@ -83,9 +89,9 @@ export async function scanReplayDirectory(config: AppConfig): Promise<ScanResult
  * API cumulative tank stats across snapshots. Best-effort: network failures
  * or ambiguous windows are logged and skipped, never surfaced to the caller.
  */
-async function tryBackfillAbandoned(config: AppConfig): Promise<void> {
+async function tryBackfillAbandoned(config: AppConfig): Promise<number> {
   const pending = cacheService.getUnresolvedAbandonedBattles(config.accountId);
-  if (pending.length === 0) return;
+  if (pending.length === 0) return 0;
 
   try {
     // Ensures wgData's tag/name → tankId lookups are warm before resolveTankId is used.
@@ -95,9 +101,17 @@ async function tryBackfillAbandoned(config: AppConfig): Promise<void> {
       const tankId = wgData.resolveTankId(b.tankKey, b.tankName);
       if (tankId !== undefined) tankIds.add(tankId);
     }
-    if (tankIds.size > 0) await backfillAbandonedBattles(config, [...tankIds]);
+    if (tankIds.size === 0) {
+      console.warn(
+        '[replay-scan] Could not resolve WG tank IDs for abandoned battles:',
+        pending.map(b => `${b.tankName} (${b.tankKey})`).join(', '),
+      );
+      return 0;
+    }
+    return await backfillAbandonedBattles(config, [...tankIds]);
   } catch (e) {
     console.warn('[replay-scan] Abandoned battle backfill failed:', e instanceof Error ? e.message : e);
+    return 0;
   }
 }
 

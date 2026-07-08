@@ -187,6 +187,14 @@ export function getBattlesInWindow(accountId: number, fromMs: number, toMs: numb
     .map(mapBattle);
 }
 
+/** All parsed battles on a given tank (matched by replay vehicle key). */
+export function getBattlesForTankKey(accountId: number, tankKey: string): BattleRecord[] {
+  return (getDb()
+    .prepare(`SELECT ${BATTLE_SELECT} FROM battles WHERE account_id = ? AND tank_key = ? ORDER BY played_at ASC`)
+    .all(accountId, tankKey) as Record<string, unknown>[])
+    .map(mapBattle);
+}
+
 /** Returns all battles still stuck at `result = 'incomplete'` for an account (candidates for backfill). */
 export function getUnresolvedAbandonedBattles(accountId: number): BattleRecord[] {
   return (getDb()

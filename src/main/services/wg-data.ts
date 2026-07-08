@@ -9,6 +9,7 @@
  */
 import * as wgService from './wargaming';
 import * as cacheService from './cache';
+import * as tankSnapshotsRepo from './repos/tank-snapshots-repo';
 import { calculateWn8, calculateWnx } from '../../shared/utils/wn8';
 import { extractVehicleTag } from '../../shared/utils/vehicles';
 import { HOUR, DAY } from '../../shared/utils/time';
@@ -69,6 +70,7 @@ export async function getWgData(config: AppConfig): Promise<WgData> {
       memEncyclopedia = sqliteCache.encyclopedia as Record<number, wgService.WgVehicle>;
       memFetchedAt    = sqliteCache.updatedAt;
       buildLookups(memEncyclopedia);
+      tankSnapshotsRepo.recordTankStatSnapshots(config.accountId, memTankStats, sqliteCache.updatedAt);
       return { tankStats: memTankStats, encyclopedia: memEncyclopedia };
     }
   }
@@ -91,6 +93,7 @@ export async function getWgData(config: AppConfig): Promise<WgData> {
       buildLookups(encyclopedia);
       // Persist to SQLite so the next startup skips the network call
       cacheService.saveWgDataCache(config.accountId, tankStats, encyclopedia);
+      tankSnapshotsRepo.recordTankStatSnapshots(config.accountId, tankStats, memFetchedAt);
       return { tankStats, encyclopedia };
     } catch (e) {
       // Don't cache failed requests
